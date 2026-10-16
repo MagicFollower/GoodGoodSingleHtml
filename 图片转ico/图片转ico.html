@@ -1,0 +1,1008 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>图片转 ICO · 区域选择 + G2 圆角</title>
+<style>
+:root{
+  color-scheme: light dark;
+  --bg:#f6f7f9; --panel:#ffffff; --ink:#1c1f24; --ink-2:#5b6470; --ink-3:#8a93a0;
+  --line:#dfe3e9; --line-2:#eceff3;
+  --acc:#2f6fed; --acc-ink:#fff; --ok:#12855a; --warn:#b4630c; --bad:#c2352c;
+  --chip:#f1f3f7;
+  /* 形状令牌：保底圆弧 + 增强层 corner-shape（本站自己也用 G2 角） */
+  --g2-shape: squircle;
+  --r-sm:8px; --r-md:12px; --r-lg:16px;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#13151a; --panel:#1b1e25; --ink:#e9ecf1; --ink-2:#a3abb8; --ink-3:#79828f;
+    --line:#2b3038; --line-2:#23272f; --acc:#5b8dff; --acc-ink:#0d1016;
+    --ok:#4ecb8b; --warn:#e0a348; --bad:#f3776b; --chip:#22262e;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);
+  font:14px/1.55 system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+.app{max-width:1320px;margin:0 auto;padding:18px 18px 44px}
+header.top{display:flex;flex-wrap:wrap;gap:12px;align-items:baseline;margin-bottom:14px}
+header.top h1{font-size:19px;margin:0;font-weight:650;letter-spacing:.2px}
+header.top .sub{color:var(--ink-2);font-size:12.5px}
+header.top .spacer{flex:1}
+
+.g2{border-radius:var(--r-md)}
+@supports (corner-shape: squircle){ .g2{corner-shape:var(--g2-shape)} }
+
+button{font:inherit;color:inherit;cursor:pointer}
+.btn{padding:7px 13px;background:var(--panel);border:1px solid var(--line);--_br:var(--r-sm);border-radius:var(--_br);--_r:var(--_br)}
+@supports (corner-shape: squircle){ .btn{corner-shape:var(--g2-shape)} }
+.btn:hover{border-color:var(--ink-3)}
+.btn.primary{background:var(--acc);color:var(--acc-ink);border-color:transparent;padding:9px 18px;font-weight:600}
+.btn.primary:disabled{opacity:.45;cursor:not-allowed}
+.btn.mini{padding:4px 9px;font-size:12px}
+.btn:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+
+main{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:14px;align-items:start}
+@media (max-width:1040px){main{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--panel);border:1px solid var(--line);--_br:var(--r-lg);border-radius:var(--_br);--_r:var(--_br);padding:14px}
+@supports (corner-shape: squircle){ .card{corner-shape:var(--g2-shape)} }
+.card+.card{margin-top:14px}
+.card h2{margin:0 0 10px;font-size:13px;font-weight:650;letter-spacing:.3px;color:var(--ink-2);text-transform:uppercase}
+
+.drop{border:1.5px dashed var(--line);--_br:var(--r-md);border-radius:var(--_br);--_r:var(--r-md);padding:20px;
+  display:flex;flex-wrap:wrap;gap:10px;align-items:center;color:var(--ink-2);font-size:13px}
+@supports (corner-shape: squircle){ .drop{corner-shape:var(--g2-shape)} }
+.drop.over{border-color:var(--acc);color:var(--ink);background:color-mix(in srgb, var(--acc) 7%, transparent)}
+
+.stagewrap{margin-top:12px;position:relative;background:var(--line-2);--_br:var(--r-md);border-radius:var(--_br);--_r:var(--r-md);overflow:hidden}
+@supports (corner-shape: squircle){ .stagewrap{corner-shape:var(--g2-shape)} }
+#stage{display:block;width:100%;touch-action:none;cursor:crosshair}
+.stagebar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+.kv{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:9px;font-size:12.5px;color:var(--ink-2)}
+.kv b{font-weight:600;color:var(--ink)}
+.kv .m{font-family:var(--mono);font-size:11.5px}
+
+label.row{display:flex;align-items:center;gap:8px;margin:9px 0}
+label.row>span.k{min-width:74px;color:var(--ink-2);font-size:12.5px}
+input[type=text],input[type=number],select{font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line);--_br:6px;border-radius:var(--_br);--_r:6px;padding:6px 9px;min-width:0}
+@supports (corner-shape: squircle){input[type=text],input[type=number],select{corner-shape:var(--g2-shape)}}
+input[type=number]{width:88px}
+input[type=range]{flex:1;accent-color:var(--acc);min-width:120px}
+input[type=color]{width:34px;height:26px;border:1px solid var(--line);background:none;padding:1px;--_br:5px;border-radius:var(--_br);--_r:5px}
+@supports (corner-shape: squircle){input[type=color]{corner-shape:var(--g2-shape)}}
+.rng{display:flex;align-items:center;gap:9px;width:100%}
+.rng output{font-family:var(--mono);font-size:11.5px;color:var(--ink-2);min-width:74px;text-align:right}
+.shells{display:flex;gap:6px;flex-wrap:wrap}
+.shell{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;background:var(--chip);--_br:8px;border:1px solid transparent;border-radius:var(--_br);--_r:8px;font-size:12.5px;cursor:pointer;user-select:none}
+@supports (corner-shape: squircle){.shell{corner-shape:var(--g2-shape)}}
+.shell input{accent-color:var(--acc)}
+.shell:has(input:checked){border-color:var(--acc);color:var(--acc);background:color-mix(in srgb,var(--acc) 10%,transparent)}
+.g2presets{display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 0 82px}
+.hint{font-size:12px;color:var(--ink-3);margin:7px 0 0}
+.hint.warn{color:var(--warn)}
+.hint.bad{color:var(--bad)}
+.hint.ok{color:var(--ok)}
+.grp{padding:11px 0;border-top:1px solid var(--line-2)}
+.grp:first-of-type{border-top:0;padding-top:2px}
+.grp>.gt{font-size:12px;font-weight:650;color:var(--ink);margin-bottom:2px}
+details{border-top:1px solid var(--line-2);padding-top:9px;margin-top:9px}
+summary{cursor:pointer;font-size:12.5px;color:var(--ink-2);list-style:none}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"▸ ";color:var(--ink-3)}
+details[open]>summary::before{content:"▾ "}
+table.tb{width:100%;border-collapse:collapse;margin:9px 0 2px;font-size:12px}
+table.tb th,table.tb td{padding:4px 6px;text-align:right;border-bottom:1px solid var(--line-2);font-family:var(--mono);font-size:11.5px;white-space:nowrap}
+table.tb th{color:var(--ink-3);font-weight:600;text-align:right}
+table.tb th:first-child,table.tb td:first-child{text-align:left;font-family:inherit}
+table.tb td.g1{color:var(--bad)}
+table.tb td.g2{color:var(--ok)}
+.act{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+pre.log{background:var(--bg);border:1px solid var(--line);--_br:8px;border-radius:var(--_br);--_r:8px;padding:9px 10px;
+  margin:10px 0 0;font-family:var(--mono);font-size:11.5px;line-height:1.5;color:var(--ink-2);
+  max-height:250px;overflow:auto;white-space:pre-wrap;word-break:break-word}
+@supports (corner-shape: squircle){pre.log{corner-shape:var(--g2-shape)}}
+table.res td{vertical-align:middle}
+table.res img{image-rendering:pixelated;background:repeating-conic-gradient(var(--line) 0 25%, transparent 0 50%) 0/12px 12px;border-radius:3px}
+.foot{margin-top:18px;font-size:12px;color:var(--ink-3);line-height:1.7}
+.foot code{font-family:var(--mono);color:var(--ink-2)}
+.badge{display:inline-block;padding:1px 7px;font-size:11px;border:1px solid var(--line);--_br:999px;border-radius:var(--_br);--_r:999px}
+</style>
+</head>
+<body>
+<div class="app">
+<header class="top">
+  <h1>图片转 ICO</h1>
+  <span class="sub">方形选框取域 · 形状后置（正方形 / 圆形 / G2 圆角矩形）· 分步降采样 · 多尺寸 ICO</span>
+  <span class="spacer"></span>
+  <span class="badge m" id="capbadge">能力探测…</span>
+</header>
+
+<main>
+  <section class="card">
+    <h2>1 · 图片与取域</h2>
+    <div class="drop" id="drop">
+      <button class="btn" id="btnPick">选择图片</button>
+      <span>也可以把文件拖进来，或直接 <b>Ctrl+V</b> 粘贴截图</span>
+      <button class="btn mini" id="btnSample">用示例图试一下</button>
+      <input type="file" id="picker" accept="image/*" hidden>
+    </div>
+
+    <div class="stagewrap" id="stagewrap" hidden>
+      <canvas id="stage"></canvas>
+    </div>
+    <div class="stagebar">
+      <button class="btn mini" id="btnFit">取域=居中最大方形</button>
+      <label class="row" style="margin:0;gap:6px"><span class="k" style="min-width:0;color:var(--ink-2);font-size:12.5px">取域边长</span>
+        <input type="number" id="cropSize" min="1" step="1" value="1" disabled style="width:92px"><span class="sub" style="font-size:12px;color:var(--ink-3)">源图像素</span></label>
+      <button class="btn mini" id="btnReset">复位视图</button>
+      <span class="sub" style="font-size:12px;color:var(--ink-3)">拖动框内=平移 · 角点=等比缩放 · 滚轮=改取域大小 · 方向键=微调 1px / Shift 10px</span>
+    </div>
+    <div class="kv">
+      <span>源图 <b class="m" id="kSrc">—</b></span>
+      <span>取域 <b class="m" id="kCrop">—</b></span>
+      <span>视图缩放 <b class="m" id="kZoom">—</b></span>
+      <span>形状 <b class="m" id="kShape">—</b></span>
+    </div>
+    <pre class="log" id="logStage" style="max-height:96px"></pre>
+  </section>
+
+  <section>
+    <div class="card">
+      <h2>2 · 形状（后置到取域上）</h2>
+      <div class="shells" role="radiogroup" aria-label="形状">
+        <label class="shell" data-shell="square"><input type="radio" name="shape" value="square">正方形</label>
+        <label class="shell" data-shell="circle"><input type="radio" name="shape" value="circle">圆形</label>
+        <label class="shell" data-shell="g2"><input type="radio" name="shape" value="g2" checked>G2 圆角矩形</label>
+      </div>
+      <div id="g2ctl" style="margin-top:11px">
+        <label class="row"><span class="k">圆角半径</span>
+          <span class="rng"><input type="range" id="rPct" min="1" max="50" step="1" value="20">
+          <output id="rOut">20%</output></span>
+        </label>
+        <label class="row"><span class="k">角形 v</span>
+          <span class="rng"><input type="range" id="vVal" min="1" max="3" step="0.02" value="2">
+          <output id="vOut">v=2.00 p=4.00</output></span>
+        </label>
+        <div class="g2presets">
+          <button class="btn mini" data-v="1">round p2(G1)</button>
+          <button class="btn mini" data-v="1.4">soft p2.64</button>
+          <button class="btn mini" data-v="2">squircle p4</button>
+          <button class="btn mini" data-v="2.375">p5.19 平端贝塞尔</button>
+          <button class="btn mini" data-v="3">p8</button>
+        </div>
+        <p class="hint" id="g2note"></p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>3 · ICO 配置</h2>
+      <div class="grp">
+        <div class="gt">尺寸档（像素）</div>
+        <div class="shells" id="sizes"></div>
+        <div style="display:flex;gap:6px;margin-top:7px">
+          <button class="btn mini" id="szAll">全选</button>
+          <button class="btn mini" id="szCommon">仅常用 16/32/48/256</button>
+          <button class="btn mini" id="szNone">清空</button>
+        </div>
+      </div>
+      <div class="grp">
+        <label class="row"><span class="k">编码</span>
+          <select id="fmt">
+            <option value="png" selected>PNG（Vista+，体积最小）</option>
+            <option value="bmp">BMP 32bpp + AND 掩码（老系统兼容）</option>
+            <option value="mix">混合：≤32 用 BMP，≥48 用 PNG</option>
+          </select>
+        </label>
+        <label class="row"><span class="k">精度</span>
+          <select id="aa">
+            <option value="0.5|1">标准 ε=0.5px · 1×</option>
+            <option value="0.05|2" selected>精细 ε=0.05px · 2× 超采样</option>
+            <option value="0.005|4">极限 ε=0.005px · 4× 超采样</option>
+          </select>
+        </label>
+        <label class="row"><span class="k">体积上限</span>
+          <select id="capSel">
+            <option value="0" selected>不限</option>
+            <option value="32768">32 KB</option>
+            <option value="65536">64 KB</option>
+            <option value="131072">128 KB</option>
+            <option value="262144">256 KB</option>
+            <option value="-1">自定义…</option>
+          </select>
+          <input type="number" id="capCustom" min="4" step="1" value="96" hidden>
+          <span class="sub" id="capUnit" style="font-size:12px;color:var(--ink-3);margin-left:-4px">KB</span>
+        </label>
+        <label class="row"><span class="k">文件名</span>
+          <input type="text" id="fname" value="icon" style="flex:1">
+        </label>
+      </div>
+      <div class="grp">
+        <label class="row"><span class="k">描边</span>
+          <label class="shell" data-shell="border"><input type="checkbox" id="bOn">内描边</label>
+          <input type="number" id="bW" min="0.5" max="40" step="0.5" value="6">px@256
+        </label>
+        <label class="row"><span class="k">描边色</span>
+          <input type="color" id="bC" value="#2f6fed">
+          <span class="sub" style="font-size:12px;color:var(--ink-3)">描边压在形状内侧</span>
+        </label>
+        <p class="hint" id="gateNote"></p>
+      </div>
+      <div class="act">
+        <button class="btn primary" id="btnGen">生成 ICO</button>
+        <button class="btn" id="btnIco" disabled>下载 .ico</button>
+      </div>
+      <details id="checksBox">
+        <summary>曲率自检（判据在本机浏览器实算）</summary>
+        <div id="checks"></div>
+      </details>
+    </div>
+
+    <div class="card" id="resCard" hidden>
+      <h2>4 · 产物</h2>
+      <div class="kv" style="margin:0 0 4px"><span>ICO <b class="m" id="kIco">—</b></span></div>
+      <table class="tb res" id="resTable"></table>
+    </div>
+  </section>
+</main>
+
+<p class="foot">
+  形状族：圆弧 <code>round</code> 内部指数 <code>p=2</code>，直边接缝处 κ 从 0 跳到 <code>1/r</code> ⇒ 永远只是 G1；
+  本工具的 G2 走超椭圆 <code>p=2^v</code>（<code>v=2 ⇒ p=4</code> 即 squircle），预览与导出共用同一份 <code>rectPoints()</code> 几何，逐点一致。
+  半径按取域边长百分比定义 ⇒ 形状与 1/κ 闸门在所有尺寸档等比成立。描边内侧宽度上限 = <code>1/κ峰值</code>，超过会自交。
+  全部处理在本地浏览器内完成，不上传、不联网。
+</p>
+</div>
+
+<script type="module">
+/* ================= 几何模块（G2 曲率连续圆角 · 与预览/导出同源） ================= */
+const kappa = (c, t) => {
+  const [x1, y1] = c.d1(t), [x2, y2] = c.d2(t);
+  return Math.abs(x1 * y2 - y1 * x2) / Math.pow(x1 * x1 + y1 * y1, 1.5);
+};
+const arcCorner = (r) => ({
+  tMax: Math.PI / 2,
+  P: (t) => [r - r * Math.cos(t), r - r * Math.sin(t)],
+  d1: (t) => [r * Math.sin(t), -r * Math.cos(t)],
+  d2: (t) => [r * Math.cos(t), r * Math.sin(t)],
+});
+const superCorner = (r, p) => {
+  const m = 2 / p, c = (v, e) => Math.pow(Math.max(0, v), e);
+  return {
+    tMax: Math.PI / 2,
+    P: (t) => [r - r * c(Math.cos(t), m), r - r * c(Math.sin(t), m)],
+    d1: (t) => [r * m * c(Math.cos(t), m - 1) * Math.sin(t), -r * m * c(Math.sin(t), m - 1) * Math.cos(t)],
+    d2: (t) => [r * m * (c(Math.cos(t), m) - (m - 1) * c(Math.cos(t), m - 2) * Math.sin(t) ** 2),
+                -r * m * ((m - 1) * c(Math.sin(t), m - 2) * Math.cos(t) ** 2 - c(Math.sin(t), m))],
+  };
+};
+function peakKappa(c, n = 360) {
+  let k = 0;
+  for (let i = 1; i < n; i++) k = Math.max(k, kappa(c, c.tMax * i / n));
+  return k;
+}
+function arcLength(c, to = c.tMax, n = 600) {
+  let L = 0, prev = c.P(0);
+  for (let i = 1; i <= n; i++) { const q = c.P(to * i / n); L += Math.hypot(q[0] - prev[0], q[1] - prev[1]); prev = q; }
+  return L;
+}
+const maxChord = (eps, kPeak) => Math.sqrt(8 * eps / kPeak);
+function segPerCorner(c, eps) { return Math.ceil(arcLength(c) / maxChord(eps, peakKappa(c))); }
+function cornerGate(p, r, w) {
+  const k = peakKappa(superCorner(r, p));
+  return { p, r, kPeak: k, safeInner: 1 / k, want: w, ok: 1 / k >= 1.2 * w };
+}
+function rectPoints(w, h, r, p, eps = 0.5) {
+  const R = Math.min(r, w / 2, h / 2);
+  const c = p === 2 ? arcCorner(R) : superCorner(R, p);
+  const seg = segPerCorner(c, eps);
+  const A = []; for (let i = 0; i <= seg; i++) A.push(c.P((Math.PI / 2) * i / seg));
+  const mx = ([x, y]) => [w - x, y], my = ([x, y]) => [x, h - y], mxy = ([x, y]) => [w - x, h - y];
+  const pts = [];
+  const push = (q) => { const l = pts[pts.length - 1];
+    if (!l || Math.abs(l[0] - q[0]) > 1e-9 || Math.abs(l[1] - q[1]) > 1e-9) pts.push([+q[0].toFixed(3), +q[1].toFixed(3)]); };
+  push([R, 0]); push([w - R, 0]);
+  A.slice().reverse().forEach((q) => push(mx(q)));
+  push([w, h - R]);
+  A.forEach((q) => push(mxy(q)));
+  push([R, h]);
+  A.slice().reverse().forEach((q) => push(my(q)));
+  push([0, R]);
+  A.forEach((q) => push(q));
+  return pts;
+}
+function sTable(c, N = 6000) {
+  const out = []; let prev = c.P(0), s = 0;
+  for (let i = 1; i <= N; i++) {
+    const t = c.tMax * Math.pow(i / N, 4), q = c.P(t);
+    s += Math.hypot(q[0] - prev[0], q[1] - prev[1]); prev = q;
+    out.push({ s, k: kappa(c, t) });
+  }
+  return out;
+}
+const kAtS = (g, s) => g.reduce((b, p) => Math.abs(p.s - s) < Math.abs(b.s - s) ? p : b, g[0]);
+function j1(c, sA = 0.25, sB = 0.0156) {
+  const g = sTable(c), a = kAtS(g, sA), b = kAtS(g, sB);
+  return { ratio: a.k / Math.max(b.k, 1e-30), sA, sB };
+}
+function j2(c) {
+  const g = sTable(c).filter((q) => q.s >= 0.25 && q.s <= 2 && q.k > 1e-9);
+  let sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (const q of g) { const x = Math.log(q.s), y = Math.log(q.k); sx += x; sy += y; sxx += x * x; sxy += x * y; }
+  return (g.length * sxy - sx * sy) / (g.length * sxx - sx * sx);
+}
+function j3Corner(c, seg, N = 1200) {
+  const poly = []; for (let i = 0; i <= seg; i++) poly.push(c.P(c.tMax * i / seg));
+  let worst = 0;
+  for (let i = 0; i <= N; i++) {
+    const q = c.P(c.tMax * i / N);
+    let d = Infinity;
+    for (let k = 0; k < poly.length - 1; k++) {
+      const a = poly[k], b = poly[k + 1];
+      const abx = b[0] - a[0], aby = b[1] - a[1], L2 = abx * abx + aby * aby;
+      const t = Math.max(0, Math.min(1, L2 ? ((q[0] - a[0]) * abx + (q[1] - a[1]) * aby) / L2 : 0));
+      d = Math.min(d, Math.hypot(q[0] - (a[0] + t * abx), q[1] - (a[1] + t * aby)));
+    }
+    worst = Math.max(worst, d);
+  }
+  return worst;
+}
+function g2report(p, r) {
+  const c = p === 2 ? arcCorner(r) : superCorner(r, p);
+  const { ratio } = j1(c), slope = j2(c), kPeak = peakKappa(c);
+  return { p, r, j1: +ratio.toFixed(4), expect: +Math.pow(0.25 / 0.0156, p - 2).toFixed(4),
+           slope: +slope.toFixed(4), kPeak: +kPeak.toFixed(6), safeInner: +(1 / kPeak).toFixed(3),
+           grade: ratio < 2 ? 'G1' : (slope >= 1.2 ? 'G2+够G3' : 'G2') };
+}
+
+/* ================= 状态 ================= */
+const $ = (s) => document.querySelector(s);
+const SIZE_ALL = [16, 20, 24, 32, 40, 48, 64, 72, 96, 128, 256];
+const $sizes = $('#sizes');
+SIZE_ALL.forEach((s) => {
+  const lab = document.createElement('label');
+  lab.className = 'shell';
+  const cb = document.createElement('input');
+  cb.type = 'checkbox'; cb.value = String(s); cb.checked = [16, 24, 32, 48, 256].includes(s);
+  lab.append(cb, document.createTextNode(String(s)));
+  lab.dataset.size = String(s);
+  $sizes.append(lab);
+});
+
+const state = {
+  src: null, srcW: 0, srcH: 0,
+  view: null, hover: null, drag: null,
+  crop: null,
+  shape: 'g2', rFrac: 0.20, v: 2,
+};
+const fmtBytes = (n) => n >= 1024 * 1024 ? (n / 1048576).toFixed(2) + ' MB' : (n >= 1024 ? (n / 1024).toFixed(1) + ' KB' : n + ' B');
+const curP = () => Math.pow(2, state.v);
+const shapeSpec = () => {
+  if (state.shape === 'square') return { kind: '正方形', rFrac: 0, p: 2 };
+  if (state.shape === 'circle') return { kind: '圆形', rFrac: 0.5, p: 2 };
+  return { kind: 'G2 圆角矩形', rFrac: state.rFrac, p: curP() };
+};
+
+function stageLog(...lines) { $('#logStage').textContent = lines.join('\n'); }
+function logLines(el, lines) { el.textContent = lines.join('\n'); }
+
+/* ================= 取域 / 视图几何 ================= */
+function clampCrop(c) {
+  const max = Math.min(state.srcW, state.srcH);
+  c.size = Math.min(Math.max(1, c.size), max);
+  c.sx = Math.min(Math.max(0, c.sx), state.srcW - c.size);
+  c.sy = Math.min(Math.max(0, c.sy), state.srcH - c.size);
+  return c;
+}
+function fitCropMaxSquare() {
+  const s = Math.min(state.srcW, state.srcH);
+  state.crop = clampCrop({ sx: (state.srcW - s) / 2, sy: (state.srcH - s) / 2, size: s });
+}
+function setCropSize(px) {
+  const c = state.crop, cx = c.sx + c.size / 2, cy = c.sy + c.size / 2;
+  const size = Math.min(Math.max(1, px), Math.min(state.srcW, state.srcH));
+  state.crop = clampCrop({ sx: cx - size / 2, sy: cy - size / 2, size });
+}
+function computeView() {
+  if (!state.src) return;
+  const wrap = $('#stagewrap');
+  const cssW = Math.max(240, wrap.clientWidth);
+  const cssH = Math.round(Math.min(540, Math.max(260, cssW * 0.62)));
+  const k = Math.min(cssW / state.srcW, cssH / state.srcH);
+  state.view = {
+    dpr: Math.max(1, window.devicePixelRatio || 1),
+    k, ox: (cssW - state.srcW * k) / 2, oy: (cssH - state.srcH * k) / 2,
+    cssW, cssH,
+  };
+  const cv = $('#stage'), d = state.view.dpr;
+  cv.width = Math.round(cssW * d); cv.height = Math.round(cssH * d);
+  cv.style.width = cssW + 'px'; cv.style.height = cssH + 'px';
+}
+
+/* ================= 形状路径（预览与导出同一份 rectPoints） ================= */
+function shapePoints(S, rFrac, p, eps) {
+  if (rFrac <= 0) return [[0, 0], [S, 0], [S, S], [0, S]];
+  const pts = rectPoints(S, S, rFrac * S, p, eps);
+  return pts.length >= 3 ? pts : [[0, 0], [S, 0], [S, S], [0, S]];
+}
+function pathFromPoints(pts) {
+  const P = new Path2D();
+  P.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) P.lineTo(pts[i][0], pts[i][1]);
+  P.closePath();
+  return P;
+}
+
+/* ================= 舞台绘制 ================= */
+const stageCv = $('#stage');
+function draw() {
+  if (!state.src || !state.view) return;
+  const d = state.view.dpr, ctx = stageCv.getContext('2d');
+  ctx.setTransform(d, 0, 0, d, 0, 0);
+  ctx.clearRect(0, 0, state.view.cssW, state.view.cssH);
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  const { k, ox, oy } = state.view, c = state.crop;
+  const bx = ox + c.sx * k, by = oy + c.sy * k, bs = c.size * k;
+  ctx.fillStyle = getCss('--line-2');
+  ctx.fillRect(0, 0, state.view.cssW, state.view.cssH);
+  ctx.drawImage(state.src, ox, oy, state.srcW * k, state.srcH * k);
+  ctx.fillStyle = 'rgba(0,0,0,0.52)';
+  ctx.fillRect(ox, oy, state.srcW * k, state.srcH * k);
+
+  const eps = Math.max(0.004, bs * 0.0012);
+  const sp = shapePoints(bs, shapeSpec().rFrac, shapeSpec().p, eps);
+  const shapePath = pathFromPoints(sp);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(bx, by, bs, bs);
+  ctx.clip();
+  ctx.drawImage(state.src, c.sx, c.sy, c.size, c.size, bx, by, bs, bs);
+  ctx.restore();
+  ctx.save();
+  ctx.translate(bx, by);
+  const ring = new Path2D();
+  ring.rect(0, 0, bs, bs);
+  ring.addPath(shapePath);
+  ctx.clip(ring, 'evenodd');
+  ctx.fillStyle = 'rgba(0,0,0,0.52)';
+  ctx.fillRect(0, 0, bs, bs);
+  ctx.restore();
+
+  ctx.save();
+  ctx.translate(bx, by);
+  ctx.strokeStyle = getCss('--acc'); ctx.lineWidth = 1.2;
+  ctx.stroke(shapePath);
+  ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineWidth = 1;
+  ctx.strokeRect(-0.5, -0.5, bs + 1, bs + 1);
+  if (bs > 26 && state.shape !== 'square') {
+    ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.setLineDash([3, 4]);
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(bs, bs); ctx.moveTo(bs, 0); ctx.lineTo(0, bs); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  const hs = 7, corners = [[0, 0], [bs, 0], [bs, bs], [0, bs]];
+  ctx.fillStyle = getCss('--panel'); ctx.strokeStyle = getCss('--acc'); ctx.lineWidth = 1.4;
+  corners.forEach(([x, y]) => {
+    ctx.beginPath(); ctx.rect(x - hs / 2, y - hs / 2, hs, hs); ctx.fill(); ctx.stroke();
+  });
+  ctx.restore();
+  if (state.hover) {
+    ctx.fillStyle = getCss('--acc');
+    ctx.beginPath(); ctx.rect(state.hover.x - hs / 2, state.hover.y - hs / 2, hs, hs); ctx.fill();
+  }
+
+  const s = shapeSpec();
+  $('#kCrop').textContent = `x${round(c.sx, 1)} y${round(c.sy, 1)} ${round(c.size, 1)}²px`;
+  $('#kZoom').textContent = `×${k.toFixed(3)}`;
+  const csEl = $('#cropSize');
+  csEl.max = String(Math.round(Math.min(state.srcW, state.srcH)));
+  if (document.activeElement !== csEl) csEl.value = String(Math.round(c.size));
+  $('#kShape').textContent = bs >= 40
+    ? `${s.kind} R=${Math.round(s.rFrac * 100)}%${state.shape === 'g2' ? ' v=' + state.v.toFixed(2) + ' p=' + curP().toFixed(2) : ''}`
+    : s.kind;
+}
+const round = (v, n) => +v.toFixed(n);
+function getCss(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#000'; }
+
+/* ================= 指针交互 ================= */
+function toStage(e) {
+  const r = stageCv.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+function toSource(p) {
+  const { k, ox, oy } = state.view;
+  return { x: (p.x - ox) / k, y: (p.y - oy) / k };
+}
+function hitTest(p) {
+  const { k, ox, oy } = state.view, c = state.crop;
+  const bx = ox + c.sx * k, by = oy + c.sy * k, bs = c.size * k;
+  const t = 10;
+  const cand = [
+    ['nw', bx, by], ['ne', bx + bs, by], ['se', bx + bs, by + bs], ['sw', bx, by + bs],
+  ];
+  for (const [h, x, y] of cand) if (Math.abs(p.x - x) <= t && Math.abs(p.y - y) <= t) return { h, x, y };
+  if (p.x >= bx && p.x <= bx + bs && p.y >= by && p.y <= by + bs) return { h: 'move' };
+  return null;
+}
+stageCv.addEventListener('pointermove', (e) => {
+  if (!state.view || !state.crop) return;
+  const p = toStage(e);
+  if (state.drag) {
+    applyDrag(p);
+    return;
+  }
+  const hit = hitTest(p);
+  state.hover = hit && hit.h !== 'move' ? hit : null;
+  stageCv.style.cursor = !hit ? 'crosshair' : hit.h === 'move' ? 'move'
+    : (hit.h === 'nw' || hit.h === 'se') ? 'nwse-resize' : 'nesw-resize';
+  draw();
+});
+stageCv.addEventListener('pointerdown', (e) => {
+  if (!state.view || !state.crop) return;
+  const p = toStage(e), hit = hitTest(p);
+  if (!hit) return;
+  e.preventDefault();
+  try { stageCv.setPointerCapture(e.pointerId); } catch { /* 合成/非激活指针：不影响拖拽 */ }
+  const s = toSource(p);
+  state.drag = { h: hit.h, x0: s.x, y0: s.y, c0: { ...state.crop } };
+});
+stageCv.addEventListener('pointerup', (e) => {
+  if (state.drag && stageCv.hasPointerCapture(e.pointerId)) stageCv.releasePointerCapture(e.pointerId);
+  state.drag = null; draw();
+});
+stageCv.addEventListener('pointerleave', () => { state.hover = null; draw(); });
+function applyDrag(p) {
+  const g = state.drag, { k, ox, oy } = state.view;
+  const sx = (p.x - ox) / k, sy = (p.y - oy) / k;
+  const dx = sx - g.x0, dy = sy - g.y0;
+  const lim = Math.min(state.srcW, state.srcH);
+  if (g.h === 'move') {
+    state.crop = clampCrop({ ...g.c0, sx: g.c0.sx + dx, sy: g.c0.sy + dy });
+  } else {
+    const o = g.c0;
+    const anchorX = g.h.includes('w') ? o.sx + o.size : o.sx;
+    const anchorY = g.h.includes('n') ? o.sy + o.size : o.sy;
+    let size = o.size;
+    if (g.h === 'se') size = o.size + dx;
+    else if (g.h === 'sw') size = o.size - dx;
+    else if (g.h === 'ne') size = o.size + dx;
+    else if (g.h === 'nw') size = o.size - dx;
+    size = Math.max(4, Math.min(lim, size));
+    const nx = g.h.includes('w') ? anchorX - size : anchorX;
+    const ny = g.h.includes('n') ? anchorY - size : anchorY;
+    state.crop = clampCrop({ sx: nx, sy: ny, size });
+  }
+  draw();
+}
+stageCv.addEventListener('wheel', (e) => {
+  if (!state.crop) return;
+  e.preventDefault();
+  const c = state.crop, f = e.deltaY > 0 ? 1.06 : 0.94;
+  const cx = c.sx + c.size / 2, cy = c.sy + c.size / 2;
+  const size = Math.max(4, Math.min(Math.min(state.srcW, state.srcH), c.size * f));
+  state.crop = clampCrop({ sx: cx - size / 2, sy: cy - size / 2, size });
+  draw();
+}, { passive: false });
+addEventListener('keydown', (e) => {
+  if (!state.crop || /INPUT|SELECT|TEXTAREA/.test(document.activeElement?.tagName)) return;
+  const step = e.shiftKey ? 10 : 1, c = state.crop;
+  const m = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
+  if (!m) return;
+  e.preventDefault();
+  state.crop = clampCrop({ sx: c.sx + m[0], sy: c.sy + m[1], size: c.size });
+  draw();
+});
+
+/* ================= 重采样：分步降采样 ================= */
+function mkCanvas(w, h) {
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(w)); c.height = Math.max(1, Math.round(h));
+  return c;
+}
+function closeIfBitmap(el) { if (el && typeof ImageBitmap !== 'undefined' && el instanceof ImageBitmap) { try { el.close(); } catch {} } }
+async function resampleSquare(src, sx, sy, ss, S, note) {
+  let d = { el: src, sx, sy, sw: ss, sh: ss };
+  const chain = [];
+  if (ss > S * 4 && typeof createImageBitmap === 'function') {
+    const mid = Math.max(S, Math.round(ss / 4));
+    try {
+      const bm = await createImageBitmap(src, sx, sy, ss, ss, { resizeWidth: mid, resizeHeight: mid, resizeQuality: 'high' });
+      if (bm.width === mid && bm.height === mid) {
+        closeIfBitmap(d.el);
+        d = { el: bm, sx: 0, sy: 0, sw: mid, sh: mid };
+        chain.push(mid + '(bitmap high)');
+      } else closeIfBitmap(bm);
+    } catch { /* 该路径不支持，退回画布折半 */ }
+  }
+  while (d.sw / 2 >= S && d.sw > S) {
+    const m = Math.max(S, Math.floor(d.sw / 2));
+    const c = mkCanvas(m, m);
+    const cx = c.getContext('2d');
+    cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high';
+    cx.drawImage(d.el, d.sx, d.sy, d.sw, d.sh, 0, 0, m, m);
+    closeIfBitmap(d.el);
+    d = { el: c, sx: 0, sy: 0, sw: m, sh: m };
+    chain.push(String(m));
+  }
+  const out = mkCanvas(S, S);
+  const ox = out.getContext('2d');
+  ox.imageSmoothingEnabled = true; ox.imageSmoothingQuality = 'high';
+  ox.drawImage(d.el, d.sx, d.sy, d.sw, d.sh, 0, 0, S, S);
+  closeIfBitmap(d.el);
+  if (note) note.chain = chain;
+  return out;
+}
+
+/* ================= 烘焙一个尺寸档 ================= */
+async function bakeSize(master, masterSide, S, opt) {
+  const srcForS = S === masterSide ? master : await resampleSquare(master, 0, 0, masterSide, S);
+  const fs = opt.ss;
+  const T = Math.min(4096, S * fs);
+  const tol = opt.eps * fs;            // 容差按最终像素定义 ⇒ 工作空间里放宽 fs 倍（结果与在 S 上算同段数）
+  const pts = shapePoints(T, opt.rFrac, opt.p, tol);
+  const work = mkCanvas(T, T);
+  const wx = work.getContext('2d');
+  wx.imageSmoothingEnabled = true; wx.imageSmoothingQuality = 'high';
+  wx.drawImage(srcForS, 0, 0, T, T);
+  if (opt.border.on && opt.border.wFrac * T > 0.02) {
+    wx.strokeStyle = opt.border.color;
+    wx.lineWidth = 2 * opt.border.wFrac * T;   // 中线描边 ⇒ 外半被遮罩裁掉 ⇒ 等效内描边
+    wx.lineJoin = 'round';
+    wx.stroke(pathFromPoints(pts));
+  }
+  const mask = mkCanvas(T, T);
+  const mx = mask.getContext('2d');
+  mx.fillStyle = '#fff';
+  mx.fill(pathFromPoints(pts));
+  wx.globalCompositeOperation = 'destination-in';
+  wx.drawImage(mask, 0, 0);
+  wx.globalCompositeOperation = 'source-over';
+  const out = T === S ? work : (() => { const c = mkCanvas(S, S); const cx = c.getContext('2d');
+    cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high'; cx.drawImage(work, 0, 0, S, S); return c; })();
+  closeIfBitmap(srcForS);
+  return out;
+}
+
+/* ================= ICO 编码 ================= */
+// 本机实测：同一张 128² 画布，toDataURL 与 toBlob('image/png') 输出 1123 字节逐字节相同，
+// 但 toBlob 在本环境要 ~1000ms/张（11 档合计 11.2s），toDataURL+base64 解码 1ms ⇒ 走后者。
+function canvasToPngBuf(cv) {
+  const du = cv.toDataURL('image/png');
+  const bin = atob(du.slice(du.indexOf(',') + 1));
+  const u = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return Promise.resolve(u.buffer);
+}
+function bmpFromCanvas(cv) {
+  const w = cv.width, h = cv.height;
+  const img = cv.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, w, h).data;
+  const xorLen = w * h * 4;
+  const maskRow = Math.ceil(w / 32) * 4;
+  const maskLen = maskRow * h;
+  const buf = new ArrayBuffer(40 + xorLen + maskLen);
+  const dv = new DataView(buf), u8 = new Uint8Array(buf);
+  dv.setUint32(0, 40, true); dv.setInt32(4, w, true); dv.setInt32(8, h * 2, true);
+  dv.setUint16(12, 1, true); dv.setUint16(14, 32, true); dv.setUint32(16, 0, true);
+  dv.setUint32(20, xorLen + maskLen, true);
+  let o = 40;
+  for (let y = h - 1; y >= 0; y--) for (let x = 0; x < w; x++) {
+    const i = (y * w + x) * 4;
+    u8[o++] = img[i + 2]; u8[o++] = img[i + 1]; u8[o++] = img[i]; u8[o++] = img[i + 3];
+  }
+  for (let y = h - 1; y >= 0; y--) {
+    for (let b = 0; b < maskRow; b++) u8[o + b] = 0;
+    for (let x = 0; x < w; x++) if (img[(y * w + x) * 4 + 3] < 128) u8[o + (x >> 3)] |= 0x80 >> (x & 7);
+    o += maskRow;
+  }
+  return buf;
+}
+function formatFor(S, mode) { return mode === 'png' ? 'png' : mode === 'bmp' ? 'bmp' : (S <= 32 ? 'bmp' : 'png'); }
+function buildIco(images) {
+  const n = images.length;
+  const base = 6 + n * 16;
+  let off = base;
+  const placed = images.map((im) => { const at = off; off += im.bytes.byteLength; return { im, at }; });
+  const buf = new ArrayBuffer(off), dv = new DataView(buf), u8 = new Uint8Array(buf);
+  dv.setUint16(0, 0, true); dv.setUint16(2, 1, true); dv.setUint16(4, n, true);
+  placed.forEach((pl, i) => {
+    const p = 6 + i * 16, S = pl.im.size;
+    dv.setUint8(p, S >= 256 ? 0 : S); dv.setUint8(p + 1, S >= 256 ? 0 : S);
+    dv.setUint8(p + 2, 0); dv.setUint8(p + 3, 0);
+    dv.setUint16(p + 4, 1, true); dv.setUint16(p + 6, 32, true);
+    dv.setUint32(p + 8, pl.im.bytes.byteLength, true); dv.setUint32(p + 12, pl.at, true);
+    u8.set(new Uint8Array(pl.im.bytes), pl.at);
+  });
+  return buf;
+}
+
+/* ================= 生成 ================= */
+function readConfig() {
+  const [epsS, ssS] = $('#aa').value.split('|');
+  const sizes = checkedSizes();
+  const capSel = $('#capSel');
+  const cap = capSel.value === '-1' ? Math.max(4, +$('#capCustom').value || 0) * 1024 : Math.max(0, +capSel.value);
+  return {
+    sizes, fmt: $('#fmt').value, eps: parseFloat(epsS), ss: parseInt(ssS, 10),
+    fname: ($('#fname').value || 'icon').trim().replace(/[\\/:*?"<>|]+/g, '_'),
+    cap, border: { on: $('#bOn').checked, w256: Math.max(0.5, +$('#bW').value || 0), color: $('#bC').value },
+  };
+}
+async function produce(S, cfg, masterInfo) {
+  const s = shapeSpec();
+  const opt = {
+    rFrac: s.rFrac, p: s.p, eps: cfg.eps, ss: cfg.ss,
+    border: { on: cfg.border.on, wFrac: cfg.border.w256 / 256, color: cfg.border.color },
+  };
+  const cv = await bakeSize(masterInfo.master, masterInfo.side, S, opt);
+  const f = formatFor(S, cfg.fmt);
+  const bytes = f === 'png' ? await canvasToPngBuf(cv) : bmpFromCanvas(cv);
+  return { size: S, format: f, bytes, canvas: cv };
+}
+let lastIco = null;
+async function generate() {
+  const cfg = readConfig();
+  const log = [];
+  if (!state.src) { logLines($('#logStage'), ['还没有图片：先上传或粘贴一张。']); return; }
+  if (!cfg.sizes.length) { logLines($('#logStage'), ['尺寸档一个都没勾，无法生成。']); return; }
+  $('#btnGen').disabled = true;
+  try {
+    const c = state.crop, s = shapeSpec();
+    const nativeMax = Math.max(...cfg.sizes);
+    const masterSide = Math.max(1, Math.min(nativeMax, Math.round(Math.min(c.size, 4096))));
+    const note = {};
+    const master = await resampleSquare(state.src, c.sx, c.sy, c.size, masterSide, note);
+    log.push(`取域 ${round(c.size, 1)}²px → 主图 ${masterSide}²px`);
+    log.push(`降采样链：${note.chain?.length ? note.chain.join(' → ') : '无折半（单次 high 绘制）'}`);
+    if (c.size < nativeMax) log.push(`提示：取域仅 ${round(c.size, 1)}px，${nativeMax} 档需放大 ${(nativeMax / c.size).toFixed(2)}×`);
+    const mi = { master, side: masterSide };
+
+    let sizes = cfg.sizes.slice().sort((a, b) => a - b), imgs = [], ico = null;
+    const cache = new Map();
+    const bakeOne = async (S) => { if (!cache.has(S)) cache.set(S, await produce(S, cfg, mi)); return cache.get(S); };
+    const dropped = [];
+    for (;;) {
+      imgs = [];
+      for (const S of sizes) imgs.push(await bakeOne(S));
+      ico = buildIco(imgs);
+      if (!cfg.cap || ico.byteLength <= cfg.cap || sizes.length === 1) break;
+      const d = sizes.pop();
+      dropped.push(d);
+      log.push(`超限 ${fmtBytes(ico.byteLength)} > ${fmtBytes(cfg.cap)} ⇒ 剔除最大档 ${d}px（已烘焙的各档直接复用，不重画）`);
+    }
+    lastIco = ico;
+    log.push(`输出 ${cfg.fname}.ico：${fmtBytes(ico.byteLength)} · ${imgs.length} 档 · 编码 ${cfg.fmt}` +
+      ` · 形状 ${s.kind}${s.rFrac ? ` R=${Math.round(s.rFrac * 100)}%` : ''}${s.p !== 2 && state.shape === 'g2' ? ` p=${s.p.toFixed(2)}` : ''}` +
+      ` · 精度 ε=${cfg.eps}px/${cfg.ss}×`);
+    if (dropped.length) log.push(`因体积上限被剔除：${dropped.join('/')}px`);
+    logLines($('#logStage'), log);
+    renderResults(imgs, cfg, s);
+    $('#btnIco').disabled = false;
+    $('#btnIco').textContent = `下载 .ico（${fmtBytes(ico.byteLength)}）`;
+  } catch (e) {
+    logLines($('#logStage'), ['生成失败：' + (e?.stack || e?.message || e)]);
+  } finally {
+    $('#btnGen').disabled = false;
+  }
+}
+function renderResults(imgs, cfg, s) {
+  $('#resCard').hidden = false;
+  $('#kIco').textContent = lastIco ? `${fmtBytes(lastIco.byteLength)} · ${imgs.length} 档 · ${s.kind}` : '—';
+  const t = $('#resTable');
+  t.innerHTML = '';
+  const head = document.createElement('tr');
+  ['档位', 'ICO 内编码', '字节', 'R / 描边px', '小样'].forEach((h, i) => {
+    const th = document.createElement('th');
+    th.textContent = h;
+    if (i === 4) th.append(document.createTextNode(' / 下载'));
+    head.append(th);
+  });
+  t.append(head);
+  imgs.forEach((im) => {
+    const tr = document.createElement('tr');
+    const mk = (txt) => { const td = document.createElement('td'); td.textContent = txt; return td; };
+    tr.append(mk(`${im.size}²`), mk(im.format.toUpperCase()), mk(fmtBytes(im.bytes.byteLength)),
+      mk(`${round(s.rFrac * im.size, 2)}${cfg.border.on ? ' / ' + round(cfg.border.w256 / 256 * im.size, 2) : ''}`));
+    const td = document.createElement('td');
+    td.style.textAlign = 'right';
+    const img = document.createElement('img');
+    img.width = img.height = 34; img.src = im.canvas.toDataURL(); img.title = `${im.size}² 实际像素`;
+    const dl = document.createElement('button');
+    dl.className = 'btn mini'; dl.textContent = 'PNG';
+    dl.title = '按最终像素导出单尺寸 PNG（ICO 内的 BMP 条目是裸 DIB，不带头部，不适合单独存文件）';
+    dl.onclick = () => canvasToPngBuf(im.canvas).then((b) => download(b, `${cfg.fname}_${im.size}.png`));
+    td.append(img, ' ', dl);
+    tr.append(td);
+    t.append(tr);
+  });
+}
+function download(buf, name) {
+  const blob = new Blob([buf], { type: /\.png$/i.test(name) ? 'image/png' : 'image/x-icon' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+/* ================= 自检面板（本机实算） ================= */
+function renderChecks() {
+  const s = shapeSpec();
+  const eps = parseFloat($('#aa').value.split('|')[0]);
+  if (state.shape === 'square') {
+    $('#checks').innerHTML = '<p class="hint">当前是直角正方形：没有角部曲线，曲率判据不适用。切到"圆形"或"G2 圆角矩形"再自检。</p>';
+    return;
+  }
+  const r = Math.max(1, Math.round(s.rFrac * 256));
+  const cand = [2, 3, 4, 5, +s.p.toFixed(3)];
+  const ps = [...new Set(cand)].filter((p) => p <= s.p + 1e-9).sort((a, b) => a - b);
+  const reps = (ps.length ? ps : [2]).map((p) => g2report(p, r));
+  if (!reps.some((q) => Math.abs(q.p - s.p) < 1e-2)) reps.push(g2report(s.p, r));
+  reps.sort((a, b) => a.p - b.p);
+  const control = reps.find((q) => q.p === 2) || g2report(2, r);
+  const controlOk = Math.abs(control.j1 - 1) < 0.005 && Math.abs(control.slope) < 0.01;
+  const cur = reps.reduce((b, q) => Math.abs(q.p - s.p) < Math.abs(b.p - s.p) ? q : b, reps[0]);
+  const cSeg = superCorner(r, s.p);
+  const seg = segPerCorner(cSeg, eps);
+  const dev = j3Corner(cSeg, seg);
+  const nameOf = (p) => Math.abs(p - 2) < 1e-6 ? '2（圆弧 round，G1 对照）'
+    : Math.abs(p - 4) < 1e-6 ? '4（squircle）' : p.toFixed(3);
+  const out = ['<table class="tb"><tr><th>p</th><th>J1 ≥2</th><th>期望</th><th>斜率</th><th>κ峰值</th><th>1/κ峰值</th><th>判定</th></tr>'];
+  reps.forEach((q) => {
+    const isCur = q === cur;
+    out.push(`<tr${isCur ? ' style="font-weight:700"' : ''}><td>${nameOf(q.p)}${isCur ? ' ← 当前' : ''}</td>` +
+      `<td>${q.j1.toFixed(4)}</td><td>${q.expect.toFixed(2)}</td><td>${q.slope.toFixed(4)}</td>` +
+      `<td>${q.kPeak.toFixed(6)}</td><td>${q.safeInner.toFixed(3)}</td>` +
+      `<td class="${q.grade === 'G1' ? 'g1' : 'g2'}">${q.grade}</td></tr>`);
+  });
+  out.push('</table>');
+  out.push(`<p class="hint ${controlOk ? 'ok' : 'bad'}">对照组 p=2 必须给 G1 / J1≈1.0000 / 斜率≈0：实测 J1=${control.j1.toFixed(4)}、斜率=${control.slope.toFixed(4)} ⇒ ${controlOk ? '判据自校验通过' : '判据异常，其余行不可信'}</p>`);
+  out.push(`<p class="hint">以 256px 档为参照：R=${r}px、v=${state.v.toFixed(2)}、p=${s.p.toFixed(3)}。折线每角 ${seg} 段、最大偏离 ${dev.toFixed(4)}px ≤ ε=${eps}px ⇒ ${dev <= eps ? 'PASS' : 'FAIL'}。段数 ∝ √边长，小档位会更少。</p>`);
+  out.push(`<p class="hint ${cur.j1 >= 2 ? 'ok' : 'bad'}">J1=${cur.j1.toFixed(2)}（解析期望 ${Math.pow(0.25 / 0.0156, s.p - 2).toFixed(2)}，差额来自近接缝取样网格）⇒ ${cur.grade}；斜率 ${cur.slope.toFixed(3)} ≈ p−2 = ${(s.p - 2).toFixed(3)}${cur.slope >= 1.2 ? ' ⇒ 也够 G3' : ''}。</p>`);
+  $('#checks').innerHTML = out.join('');
+}
+
+/* ================= 闸门提示 ================= */
+function renderGate() {
+  const cfg = readConfig(), s = shapeSpec();
+  const el = $('#gateNote');
+  el.className = 'hint';
+  if (!cfg.border.on) {
+    el.textContent = state.shape === 'square'
+      ? '描边关闭；正方形不描边即原样输出。'
+      : `描边关闭。内描边宽度上限 = 1/κ峰值，当前形状在 R=${Math.round(s.rFrac * 256)}px 档约 ${gateSafe(s)}px。`;
+    return;
+  }
+  if (s.rFrac <= 0) { el.textContent = '正方形描边不受曲率闸门约束（直边，κ=0）。'; return; }
+  const r = Math.max(1, Math.round(s.rFrac * 256));
+  const g = cornerGate(s.p, r, cfg.border.w256);
+  const ratioPct = Math.round(cfg.border.w256 / r * 100);
+  if (g.ok) {
+    el.textContent = `闸门 OK：w=${cfg.border.w256}px（R 的 ${ratioPct}%）≤ 1/κ峰值 ${g.safeInner.toFixed(3)}px 的 1.2 倍余量内；内侧偏移与形状等比，各尺寸档同结论。`;
+    el.classList.add('ok');
+  } else {
+    el.textContent = `闸门不过：w=${cfg.border.w256}px 超过 1/κ峰值 ${g.safeInner.toFixed(3)}px，内侧等距线会自交（接缝出现凹折）。把描边降到 ≤${Math.floor(g.safeInner / 1.2)}px，或把半径拉大 / v 降到 1（圆弧）。`;
+    el.classList.add('bad');
+  }
+}
+const gateSafe = (s) => s.rFrac <= 0 ? '∞'
+  : (1 / peakKappa(s.p === 2 ? arcCorner(Math.round(s.rFrac * 256)) : superCorner(Math.round(s.rFrac * 256), s.p))).toFixed(3);
+
+/* ================= 上传 / 粘贴 / 示例图 ================= */
+function setSource(el, w, h, name) {
+  state.src = el; state.srcW = w; state.srcH = h;
+  fitCropMaxSquare();
+  $('#stagewrap').hidden = false;
+  $('#cropSize').disabled = false;
+  computeView(); draw(); renderChecks(); renderGate();
+  $('#kSrc').textContent = `${w}×${h}px`;
+  stageLog(`已载入 ${name || '图片'}：${w}×${h}px。取域默认=居中最大方形。`);
+}
+function loadFile(f) {
+  if (!f || !/^image\//.test(f.type)) { stageLog('只能读图片文件。'); return; }
+  const url = URL.createObjectURL(f);
+  const img = new Image();
+  img.onload = () => {
+    setSource(img, img.naturalWidth, img.naturalHeight, f.name);
+    const base = f.name.replace(/\.[^.]+$/, '');
+    if (base) $('#fname').value = base.toLowerCase().replace(/[^\w.-]+/g, '_').slice(0, 40) || 'icon';
+    URL.revokeObjectURL(url);
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); stageLog('这张图解码失败，换一张试试（避免 TIFF/BMP 里的罕见压缩）。'); };
+  img.src = url;
+}
+$('#btnPick').onclick = () => $('#picker').click();
+$('#picker').onchange = (e) => loadFile(e.target.files[0]);
+const dropEl = $('#drop');
+dropEl.ondragover = (e) => { e.preventDefault(); dropEl.classList.add('over'); };
+dropEl.ondragleave = () => dropEl.classList.remove('over');
+dropEl.ondrop = (e) => { e.preventDefault(); dropEl.classList.remove('over'); loadFile(e.dataTransfer.files[0]); };
+document.addEventListener('paste', (e) => {
+  const it = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith('image/'));
+  if (it) loadFile(it.getAsFile());
+});
+$('#btnSample').onclick = () => {
+  const S = 1200, cv = mkCanvas(S, S), x = cv.getContext('2d');
+  const g = x.createLinearGradient(0, 0, S, S);
+  g.addColorStop(0, '#2f6fed'); g.addColorStop(0.55, '#7a3ff2'); g.addColorStop(1, '#12b3a0');
+  x.fillStyle = g; x.fillRect(0, 0, S, S);
+  x.fillStyle = 'rgba(255,255,255,.16)';
+  for (let i = 0; i < 7; i++) { x.beginPath(); x.arc(S * (0.16 + i * 0.12), S * (0.82 - (i % 3) * 0.2), S * 0.11, 0, 7); x.fill(); }
+  x.fillStyle = '#fff'; x.font = `700 ${S * 0.34}px system-ui`; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillText('G2', S / 2, S * 0.46);
+  x.font = `600 ${S * 0.09}px system-ui`; x.fillText('ICO · 1200px', S / 2, S * 0.72);
+  setSource(cv, S, S, '示例图 1200×1200');
+};
+
+/* ================= 控件绑定 ================= */
+const sizeInput = (s) => document.querySelector(`#sizes label[data-size="${s}"] input`);
+const checkedSizes = () => SIZE_ALL.filter((s) => sizeInput(s).checked);
+const setSizeSet = (on) => { SIZE_ALL.forEach((sz) => { sizeInput(sz).checked = on(sz); }); renderGate(); };
+$sizes.addEventListener('change', renderGate);
+$('#szAll').onclick = () => setSizeSet(() => true);
+$('#szNone').onclick = () => setSizeSet(() => false);
+$('#szCommon').onclick = () => setSizeSet((s) => [16, 32, 48, 256].includes(s));
+document.querySelectorAll('input[name=shape]').forEach((r) => {
+  r.onchange = () => {
+    state.shape = r.value;
+    $('#g2ctl').style.display = state.shape === 'g2' ? '' : 'none';
+    draw(); renderChecks(); renderGate();
+  };
+});
+$('#rPct').oninput = (e) => {
+  state.rFrac = +e.target.value / 100;
+  $('#rOut').textContent = `${e.target.value}% · ${Math.round(+e.target.value * 2.56)}px@256`;
+  draw(); renderChecks(); renderGate();
+};
+$('#vVal').oninput = (e) => {
+  state.v = +e.target.value;
+  $('#vOut').textContent = `v=${state.v.toFixed(2)} p=${curP().toFixed(2)}`;
+  draw(); renderChecks(); renderGate();
+};
+document.querySelectorAll('.g2presets .btn').forEach((b) => {
+  b.onclick = () => { $('#vVal').value = b.dataset.v; $('#vVal').oninput({ target: $('#vVal') }); };
+});
+$('#g2note').textContent = 'v=1 就是圆弧（G1）；v=2 是 squircle（p=4）；v 越大接缝越平，但内描边可用宽度按 1/κ峰值 收缩。';
+['fmt', 'aa', 'bOn', 'bW', 'bC'].forEach((id) => { const el = $('#' + id); el.onchange = () => { renderChecks(); renderGate(); }; });
+$('#aa').addEventListener('change', () => { draw(); });
+$('#capSel').onchange = (e) => {
+  const custom = e.target.value === '-1';
+  $('#capCustom').hidden = !custom;
+  $('#capUnit').hidden = !custom;
+};
+$('#btnFit').onclick = () => { if (state.src) { fitCropMaxSquare(); draw(); } };
+$('#cropSize').onchange = (e) => { if (!state.src) return; setCropSize(+e.target.value || 1); draw(); };
+$('#btnReset').onclick = () => { computeView(); draw(); };
+$('#btnGen').onclick = generate;
+$('#btnIco').onclick = () => { if (lastIco) download(lastIco, `${readConfig().fname}.ico`); };
+
+addEventListener('resize', () => { if (state.src) { computeView(); draw(); } });
+
+/* ================= 能力探测（UA 一变就重测，不引用别人的数字） ================= */
+(async function detect() {
+  const s = (prop, value) => { try { return CSS.supports(prop, value); } catch { return false; } };
+  const cap = {
+    cornerShape: s('corner-shape', 'squircle'),
+    superellipse: s('corner-shape', 'superellipse(2.322)'),
+    cbResizeHigh: false,
+  };
+  try {
+    const c = mkCanvas(8, 8);
+    const bm = await createImageBitmap(c, 0, 0, 8, 8, { resizeWidth: 2, resizeHeight: 2, resizeQuality: 'high' });
+    cap.cbResizeHigh = bm.width === 2 && bm.height === 2;
+    closeIfBitmap(bm);
+  } catch { /* 不支持则降采样链走画布折半 */ }
+  const mark = (v) => v ? '✓' : '✗';
+  $('#capbadge').textContent = `本机：corner-shape ${mark(cap.cornerShape)} · superellipse ${mark(cap.superellipse)} · ` +
+    `bitmap(high) ${mark(cap.cbResizeHigh)} · ${navigator.userAgent.match(/(?:Chrome|Firefox|Edg|Safari)\/[\d.]+/)?.[0] || 'browser'}`;
+  window.__g2ico = {
+    superCorner, arcCorner, peakKappa, segPerCorner, rectPoints, shapePoints, pathFromPoints,
+    g2report, j1, j2, j3Corner, cornerGate, bmpFromCanvas, buildIco, canvasToPngBuf,
+    bakeSize, resampleSquare, formatFor, state, cap, generate, setSource, readConfig,
+    getIco: () => lastIco,
+  };
+  draw();
+})();
+$('#rPct').oninput({ target: $('#rPct') });
+$('#vVal').oninput({ target: $('#vVal') });
+renderChecks(); renderGate();
+</script>
+</body>
+</html>
