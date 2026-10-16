@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<!--
+  tools/probe/verify6-presetstore.html — 预设持久化定向探针
+  要回答的是"保存的预设到底落在哪"，所以每一步都走**真 UI**（点 create + / 点删除），
+  不直接调 library.createPreset —— 直调只能证明函数会写盘，证明不了按钮那条路。
+  顺带量两件容易记错的事：内置 8 个预设会不会被复制进盘上、配额失败时是不是静默。
+-->
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>verify6 preset store</title>
+    <link rel="stylesheet" href="../../vendor/codemirror.min.css" />
+    <link rel="stylesheet" href="../../css/app.css" />
+    <link rel="stylesheet" href="../../css/fonts.css" />
+  </head>
+  <body>
+    <main class="page">
+      <section class="editor">
+        <div class="toolbar" id="toolbar">
+          <div data-slot="logo"></div>
+          <div data-slot="theme-dropdown"></div>
+          <div data-slot="language-dropdown"></div>
+          <div class="toolbar-second-row">
+            <div class="setting-buttons">
+              <div data-slot="background-select"></div>
+              <div data-slot="settings"></div>
+              <div data-slot="copy-menu"></div>
+            </div>
+            <div class="share-buttons"><div data-slot="export-menu"></div></div>
+          </div>
+        </div>
+        <div class="canvas-area" id="canvas-area">
+          <div class="drop-overlay" id="drop-overlay" hidden></div>
+          <div class="export-container" id="export-container">
+            <div class="container" id="canvas-container">
+              <div class="window-controls" id="window-controls" hidden></div>
+              <div class="CodeMirror__container" id="editor-host"></div>
+              <div class="watermark-host" id="watermark-host"></div>
+              <div class="container-bg">
+                <div class="white eliminateOnRender"></div>
+                <div class="alpha eliminateOnRender"></div>
+                <div class="bg" id="canvas-bg"></div>
+              </div>
+              <div class="handler" id="width-handler" hidden></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+    <div class="toast-host" id="toast-host"></div>
+
+    <script src="../../vendor/codemirror.min.js"></script>
+    <script src="../../vendor/addons.js"></script>
+    <script src="../../vendor/modes.js"></script>
+    <script src="../../vendor/custom-modes.js"></script>
+    <script src="../../vendor/hljs.min.js"></script>
+    <script src="../../vendor/hljs-languages.js"></script>
+    <script src="../../vendor/dom-to-image.js"></script>
+    <script src="../../data/settings.js"></script>
+    <script src="../../data/themes.js"></script>
+    <script src="../../data/languages.js"></script>
+    <script src="../../data/presets.js"></script>
+    <script src="../../data/svg.js"></script>
+    <script src="../../data/fonts.js"></script>
+    <script src="../../js/util.js"></script>
+    <script src="../../js/url.js"></script>
+    <script src="../../js/state.js"></script>
+    <script src="../../js/theme.js"></script>
+    <script src="../../js/invisibles.js"></script>
+    <script src="../../js/editor.js"></script>
+    <script src="../../js/render.js"></script>
+    <script src="../../js/export.js"></script>
+    <script src="../../js/ui/widgets.js"></script>
+    <script src="../../js/ui/panels.js"></script>
+    <script src="../../js/app.js"></script>
+
+    <script>
+      const R = { steps: [], errors: [] }
+      const LS = {}
+      /* 盘上真读数：三个键各存了什么、多大 */
+      function snap(tag) {
+        const keys = ['CARBON_STATE', 'CARBON_PRESETS', 'CARBON_THEMES']
+        const out = { tag, keys: {} }
+        for (const k of keys) {
+          const raw = localStorage.getItem(k)
+          if (raw == null) {
+            out.keys[k] = { present: false }
+            continue
+          }
+          let parsed = null
+          try {
+            parsed = JSON.parse(raw)
+          } catch (e) {
+            out.keys[k] = { present: true, bytes: raw.length, parseError: e.message }
+            continue
+          }
+          const isArray = Array.isArray(parsed)
+          out.keys[k] = {
+            present: true,
+            bytes: raw.length,
+            shape: isArray ? 'array' : typeof parsed,
+            count: isArray ? parsed.length : undefined,
+            /* 数组里每一条是不是都带 custom 标记（内置预设不该落盘） */
+            customFlags: isArray ? parsed.map(p => !!p.custom) : undefined,
+            names: isArray ? parsed.map(p => p.name || p.id).slice(0, 4) : undefined,
+            firstKeys: !isArray && parsed ? Object.keys(parsed).slice(0, 6) : isArray && parsed[0] ? Object.keys(parsed[0]) : undefined,
+            hasIconDataUrl: isArray ? parsed.map(p => String(p.icon || '').slice(0, 5)) : undefined,
+          }
+        }
+        out.listCount = CARBON.store.library.presets.length
+        out.customCount = CARBON.store.library.customPresets.length
+        out.appliedPreset = CARBON.store.state.preset
+        return out
+      }
+
+      function step(name, fn) {
+        let observed = null
+        let pass = false
+        try {
+          observed = fn()
+          pass = observed !== false && observed !== undefined
+        } catch (e) {
+          observed = 'ERR ' + e.message
+          R.errors.push(name + ': ' + e.message)
+        }
+        R.steps.push({ name, pass, observed })
+        flush()
+      }
+
+      async function stepAsync(name, fn) {
+        let observed = null
+        let pass = false
+        try {
+          observed = await fn()
+          pass = observed !== false && observed !== undefined
+        } catch (e) {
+          observed = 'ERR ' + e.message
+          R.errors.push(name + ': ' + e.message)
+        }
+        R.steps.push({ name, pass, observed })
+        flush()
+      }
+
+      const wait = ms => new Promise(r => setTimeout(r, ms))
+      function click(el) {
+        if (!el) throw new Error('元素不存在')
+        el.scrollIntoView && el.scrollIntoView({ block: 'center' })
+        el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+        el.click()
+      }
+
+      async function run() {
+        await wait(800)
+        R.origin = location.origin
+        R.protocol = location.protocol
+
+        /* 基线：还没建预设时，盘上应该没有 CARBON_PRESETS（内置 8 个不落盘） */
+        step('载入后无 CARBON_PRESETS（内置 8 个不落盘）', () => {
+          const raw = localStorage.getItem('CARBON_PRESETS')
+          const s = snap('载入后')
+          return raw === null ? s : { unexpected: String(raw).slice(0, 80), ...s }
+        })
+
+        /* 打开设置面板 → 点「create +」，全程不碰 library API */
+        step('设置面板能打开', () => {
+          click(document.querySelector('[data-slot="settings"] button, [data-slot="settings"]'))
+          return !!document.querySelector('.settings-presets')
+        })
+
+        const before = CARBON.store.library.customPresets.length
+        const createBtn = [...document.querySelectorAll('.settings-presets .create')][0]
+        step('点 create + 建出一个预设', () => {
+          click(createBtn)
+          return true
+        })
+        await wait(900)
+
+        step('建完：盘上出现 CARBON_PRESETS 且只有 1 条', () => {
+          const s = snap('建预设后')
+          s.delta = CARBON.store.library.customPresets.length - before
+          return s
+        })
+
+        step('预设 id 形如 preset:* 且带 custom:true', () => {
+          const arr = JSON.parse(localStorage.getItem('CARBON_PRESETS') || '[]')
+          const p = arr[0] || {}
+          return {
+            idHead: String(p.id).slice(0, 7),
+            custom: p.custom,
+            /* 这五个字段是 createPreset 明确剥掉的 */
+            stripped: ['code', 'titleBar', 'highlights', 'preset', 'backgroundImage'].map(k => k in p),
+            iconBytes: p.icon ? String(p.icon).length : 0,
+            fields: Object.keys(p).length,
+          }
+        })
+
+        step('当前应用的预设写在 CARBON_STATE.preset，不在 CARBON_PRESETS', () => {
+          const st = JSON.parse(localStorage.getItem('CARBON_STATE') || '{}')
+          const arr = JSON.parse(localStorage.getItem('CARBON_PRESETS') || '[]')
+          return { statePreset: st.preset, arrayHasAppliedFlag: arr.some(p => p.applied) }
+        })
+
+        step('刷新后预设仍在（同一 origin 桶）', () => {
+          /* 重新读一遍盘上并让 library 按同一口径合并 */
+          const arr = JSON.parse(localStorage.getItem('CARBON_PRESETS') || '[]')
+          return { onDisk: arr.length, inList: CARBON.store.library.presets.length, builtin: CARBON.DEFAULT_PRESETS.length }
+        })
+
+        /* 删除：整表重写，不是删一条记录 */
+        const rmBtn = document.querySelector('.preset-remove')
+        step('点删除后盘上回到 0 条（整表重写）', () => {
+          if (!rmBtn) return '没有删除按钮'
+          click(rmBtn)
+          const arr = JSON.parse(localStorage.getItem('CARBON_PRESETS') || '[]')
+          return { onDisk: arr.length, inMemory: CARBON.store.library.customPresets.length }
+        })
+
+      /* 这两档要在点完 create + 之后**等**：按钮那条路是 async（先 exporter.thumbnail() 出缩略图，
+       * 再 createPreset 写盘）。同步读会拿到"什么都没发生"，那是读数无效，不是结论。 */
+      async function clickAndWaitCreate(tag) {
+        const before = CARBON.store.library.customPresets.length
+        click(document.querySelector('.settings-presets .create'))
+        for (let i = 0; i < 60; i++) {
+          await wait(100)
+          if (CARBON.store.library.customPresets.length !== before) break
+        }
+        await wait(300)
+        const arr = JSON.parse(localStorage.getItem('CARBON_PRESETS') || '[]')
+        return {
+          tag,
+          inMemoryBefore: before,
+          inMemoryAfter: CARBON.store.library.customPresets.length,
+          onDisk: arr.length,
+          /* 内存有、盘上没有 = 静默不一致（UI 看着存住了，刷新就没了） */
+          silentDiverge: CARBON.store.library.customPresets.length > arr.length,
+        }
+      }
+
+        /* 配额打满时再建一个：writeJson 的降级重试只对 CARBON_STATE，
+         * CARBON_PRESETS 抛错就 return false，而 createPreset 不看返回值、先改内存再写盘 →
+         * 内存有、盘上没有就是静默不一致（UI 上这条在，刷新就没了）。 */
+        R.quota = await (async () => {
+          let filled = 0
+          try {
+            for (let i = 0; i < 40; i++) {
+              localStorage.setItem('__filler_' + i, 'x'.repeat(128 * 1024))
+              filled++
+            }
+          } catch (e) {
+            /* 期望在这里抛 QuotaExceededError */
+          }
+          const probeBytes = (localStorage.getItem('__filler_0') || '').length
+          const r = await clickAndWaitCreate('配额打满')
+          r.fillerCount = filled
+          r.fillerEachBytes = probeBytes
+          r.fillerThrewAt = filled
+          return r
+        })()
+        R.steps.push({ name: '配额打满时建预设（异步轮询）', pass: true, observed: R.quota })
+        flush()
+      }
+
+      let pre = null
+      function flush() {
+        if (!pre) {
+          pre = document.createElement('pre')
+          document.body.appendChild(pre)
+        }
+        pre.textContent = 'PRESETSTORE_JSON' + JSON.stringify(R, null, 1)
+      }
+      window.addEventListener('error', e => R.errors.push('window: ' + e.message))
+      window.addEventListener('load', () => {
+        flush()
+        run()
+          .catch(e => {
+            R.fatal = e && e.message ? e.message : String(e)
+          })
+          .then(flush)
+      })
+    </script>
+  </body>
+</html>

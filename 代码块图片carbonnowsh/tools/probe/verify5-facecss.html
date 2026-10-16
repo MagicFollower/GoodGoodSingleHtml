@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<!--
+  tools/probe/verify5-facecss.html — 根因定向探针：dom-to-image 能不能读到 @font-face
+  它靠 document.styleSheets[].cssRules 扫 @font-face。file:// 下 Chromium 把每个本地文件当
+  独立的不透明源，外链表(css/fonts.css)读 cssRules 会抛 SecurityError；
+  同一文档里的内联 <style> 不属于跨源，理论上读得到 —— 这里两件事分别量，不靠推断。
+-->
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>verify5 facecss</title>
+    <link rel="stylesheet" href="../../css/fonts.css" />
+    <style id="inline-face">
+      /* 内联表：先放一条普通规则，再放一条 data: 的 @font-face，分别看能不能枚举到 */
+      .probe-unused { color: red; }
+    </style>
+  </head>
+  <body>
+    <div id="out" style="font: 14px monospace; white-space: pre; color: #eee; background: #000; padding: 12px">running…</div>
+    <script>
+      const R = { sheets: [], notes: [] }
+      const out = document.getElementById('out')
+      function dump() {
+        out.textContent = 'FACECSS_JSON' + JSON.stringify(R, null, 1)
+      }
+
+      function scanSheets(tag) {
+        const rows = []
+        for (const sh of document.styleSheets) {
+          const owner = sh.ownerNode
+          const hrefGuess = owner && owner.tagName === 'LINK' ? owner.getAttribute('href') : owner && owner.id ? '#' + owner.id : '(inline)'
+          let state
+          let fontFace = null
+          let total = null
+          try {
+            const rules = sh.cssRules
+            total = rules.length
+            fontFace = [...rules].filter(r => r.constructor.name === 'CSSFontFaceRule' || r.type === 5).length
+            state = 'ok'
+          } catch (e) {
+            state = e.name + ': ' + e.message
+          }
+          rows.push({ tag, hrefGuess, state, rules: total, fontFaceRules: fontFace })
+        }
+        return rows
+      }
+
+      window.addEventListener('load', () => {
+        R.sheets = R.sheets.concat(scanSheets('载入时'))
+        /* 再往内联表里塞一条 data: 的 @font-face，看它能不能被枚举、能不能真的用上 */
+        const st = document.getElementById('inline-face')
+        st.sheet.insertRule("@font-face{font-family:'ProbeInlineFace';src:url(data:font/woff2;base64,d09GMgABAAAAAAF) format('woff2')}", st.sheet.cssRules.length)
+        R.afterInsert = scanSheets('插入 data URI face 后')
+        R.inlineCount = st.sheet.cssRules.length
+        /* 这条只证一件事：内联表在 file:// 下是可读的（insertRule 没抛） */
+        R.note1 = 'insertRule 成功即内联表可写'
+        /* 外链表能不能读，用同一条路再试一次（有些实现只在首次访问抛） */
+        try {
+          const ext = [...document.styleSheets].find(s => s.ownerNode && s.ownerNode.tagName === 'LINK')
+          R.extLinkAgain = { href: ext.ownerNode.getAttribute('href'), rules: ext.cssRules.length }
+        } catch (e) {
+          R.extLinkAgain = { error: e.name + ': ' + e.message }
+        }
+        dump()
+      })
+    </script>
+  </body>
+</html>

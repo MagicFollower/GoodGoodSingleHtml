@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>探针台 F：localStorage 的桶 / 配额 / 文件读写面</title>
+</head>
+<body>
+<pre id="out">(running)</pre>
+
+<!-- 对照用：同一个 data/presets.js，<script src> 这条路在 file:// 下是通的。
+     fetch/XHR 量的是同一个 URL，两条路结果不同才说明差别在策略而不在路径。 -->
+<script src="../../data/presets.js"></script>
+
+<script>
+;(function () {
+  'use strict'
+
+  const out = document.getElementById('out')
+  const mode = new URLSearchParams(location.search).get('mode') || 'all'
+  const MARKER = 'P7_MARKER'
+  const TWIN = 'P7_TWIN'
+  const R = { mode, href: location.href, protocol: location.protocol, origin: location.origin || null }
+
+  function done () {
+    out.textContent = 'P7_JSON' + JSON.stringify(R)
+  }
+  function safeGet (k) {
+    try { return localStorage.getItem(k) } catch (e) { return 'THREW ' + e.name }
+  }
+  function safeSet (k, v) {
+    try { localStorage.setItem(k, v); return true } catch (e) { return 'THREW ' + e.name }
+  }
+
+  /* ---------------------------------------------------------- 环境与可达性 */
+
+  R.env = {
+    isSecureContext: window.isSecureContext,
+    userAgent: navigator.userAgent.slice(0, 60),
+  }
+
+  R.ls = (function () {
+    const r = { accessible: false }
+    try {
+      const probe = '__p7_access__'
+      localStorage.setItem(probe, '1')
+      localStorage.removeItem(probe)
+      r.accessible = true
+    } catch (e) {
+      r.error = e.name + ': ' + e.message
+    }
+    try { r.length = localStorage.length } catch (e) { r.lengthError = e.name }
+    try { r.proto = Object.getPrototypeOf(localStorage) === Storage.prototype } catch (e) {}
+    return r
+  })()
+
+  R.keys = (function () {
+    const r = {}
+    for (const k of ['CARBON_STATE', 'CARBON_PRESETS', 'CARBON_THEMES']) {
+      const v = safeGet(k)
+      r[k] = v === null ? 'absent' : v === false ? 'inaccessible' : { chars: String(v).length }
+    }
+    return r
+  })()
+
+  /* ---------------------------------------------------------- 桶：跨页 / 跨目录 */
+
+  R.marker = { markerBefore: safeGet(MARKER), twinBefore: safeGet(TWIN) }
+  if (mode === 'all') safeSet(MARKER, location.href)
+  if (mode === 'twin') safeSet(TWIN, location.href)
+  R.marker.markerAfter = safeGet(MARKER)
+  R.marker.twinAfter = safeGet(TWIN)
+
+  /* ---------------------------------------------------------- 有没有 Node 那层 */
+
+  R.nodeGlobals = {
+    require: typeof window.require,
+    process: typeof window.process,
+    module: typeof window.module,
+    exports: typeof window.exports,
+    ipcRenderer: typeof window.ipcRenderer,
+  }
+
+  /* ---------------------------------------------------------- 文件读写面 */
+
+  R.scriptSrcLoaded = (function () {
+    const p = window.CARBON && window.CARBON.DEFAULT_PRESETS
+    return { isArray: Array.isArray(p), count: Array.isArray(p) ? p.length : null }
+  })()
+
+  R.fsApi = {
+    showSaveFilePicker: typeof window.showSaveFilePicker,
+    showOpenFilePicker: typeof window.showOpenFilePicker,
+    chooseFileSystemEntries: typeof window.chooseFileSystemEntries,
+    navigatorStorageEstimate: !!(navigator.storage && navigator.storage.estimate),
+    downloadAttr: 'download' in document.createElement('a'),
+    createObjectURL: typeof URL.createObjectURL,
+    userActivation: navigator.userActivation
+      ? { hasBeenActive: navigator.userActivation.hasBeenActive, isActive: navigator.userActivation.isActive }
+      : 'absent',
+  }
+
+  function timedFetch () {
+    const target = '../../data/presets.js'
+    return fetch(target).then(
+      res => ({ ok: res.ok, status: res.status, type: res.type }),
+      err => ({ threw: true, name: err.name, message: err.message })
+    )
+  }
+
+  function timedXhr () {
+    return new Promise(resolve => {
+      const x = new XMLHttpRequest()
+      x.open('GET', '../../data/presets.js')
+      x.onload = () => resolve({ loaded: true, status: x.status })
+      x.onerror = () => resolve({ errored: true, status: x.status, statusText: x.statusText })
+      x.ontimeout = () => resolve({ timedout: true })
+      try { x.send() } catch (e) { resolve({ threw: true, name: e.name, message: e.message }) }
+    })
+  }
+
+  function tryOpenPicker () {
+    if (typeof window.showOpenFilePicker !== 'function') return Promise.resolve({ skipped: 'no api' })
+    return window.showOpenFilePicker().then(
+      () => ({ resolved: true }),
+      err => ({ rejected: true, name: err.name, message: String(err.message).slice(0, 90) })
+    )
+  }
+
+  function trySavePicker () {
+    if (typeof window.showSaveFilePicker !== 'function') return Promise.resolve({ skipped: 'no api' })
+    return window.showSaveFilePicker({ suggestedName: 'carbon-config.json' }).then(
+      () => ({ resolved: true }),
+      err => ({ rejected: true, name: err.name, message: String(err.message).slice(0, 90) })
+    )
+  }
+
+  function tryEstimate () {
+    if (!(navigator.storage && navigator.storage.estimate)) return Promise.resolve({ skipped: 'no api' })
+    return navigator.storage.estimate().then(
+      e => ({ quota: e.quota, usage: e.usage }),
+      err => ({ threw: true, name: err.name, message: err.message })
+    )
+  }
+
+  /* ---------------------------------------------------------- 同步写盘的代价 */
+
+  R.timing = (function () {
+    if (mode !== 'sync') return 'not measured in this mode'
+    const big = 'x'.repeat(131072)
+    const small = 'y'.repeat(1024)
+    const t = []
+    let t0 = performance.now()
+    localStorage.setItem('P7_TIMING_BIG', big)
+    t.push(round(performance.now() - t0))
+
+    t0 = performance.now()
+    for (let i = 0; i < 200; i++) localStorage.setItem('P7_TIMING_S' + i, small)
+    t.push(round(performance.now() - t0))
+
+    t0 = performance.now()
+    const back = localStorage.getItem('P7_TIMING_BIG')
+    t.push(round(performance.now() - t0))
+
+    for (let i = 0; i < 200; i++) localStorage.removeItem('P7_TIMING_S' + i)
+    localStorage.removeItem('P7_TIMING_BIG')
+    return { oneWrite128KB_ms: t[0], twoHundredWrites1KB_ms: t[1], readBack128KB_ms: t[2], readBackChars: back ? back.length : null }
+  })()
+
+  function round (n) { return Math.round(n * 100) / 100 }
+
+  /* ---------------------------------------------------------- 配额打满 */
+
+  R.fill = (function () {
+    if (mode !== 'fill') return 'not measured in this mode'
+    const block = 'z'.repeat(131072)
+    let i = 0
+    let error = null
+    for (; i < 400; i++) {
+      try { localStorage.setItem('P7_FILL_' + i, block) } catch (e) { error = e.name; break }
+    }
+    const r = {
+      filled: i,
+      eachBytes: block.length,
+      approxBytes: i * block.length,
+      threwAt: error ? i : null,
+      error: error,
+      lengthAfter: localStorage.length,
+    }
+    for (let j = 0; j < 400; j++) localStorage.removeItem('P7_FILL_' + j)
+    r.lengthAfterCleanup = localStorage.length
+    return r
+  })()
+
+  /* ---------------------------------------------------------- 异步腿 */
+
+  if (mode === 'sync' || mode === 'fill' || mode === 'twin' || mode === 'read') {
+    // 这几档不需要网络/API 异步腿，直接收尾（twin/read 只要读数，越快越不会被别的腿污染）
+    Promise.resolve().then(() => done()).catch(e => { R.fatal = String(e && e.message); done() })
+    return
+  }
+
+  function withTimeout (label, p, ms) {
+    R.stage = R.stage || []
+    R.stage.push('start:' + label)
+    return Promise.race([
+      Promise.resolve(p).then(v => { R.stage.push('end:' + label); return v }),
+      new Promise(resolve => setTimeout(() => resolve({ hung: true, label }), ms)).then(v => { R.stage.push('timeout:' + label); return v }),
+    ])
+  }
+
+  Promise.all([
+    withTimeout('fetch', timedFetch(), 5000),
+    withTimeout('xhr', timedXhr(), 5000),
+    withTimeout('picker', tryOpenPicker(), 5000),
+    withTimeout('savePicker', trySavePicker(), 5000),
+    withTimeout('estimate', tryEstimate(), 5000),
+  ])
+    .then(([f, x, p, sv, e]) => {
+      R.fetchSameDirFile = f
+      R.xhrSameDirFile = x
+      R.openPickerNoGesture = p
+      R.savePickerNoGesture = sv
+      R.storageEstimate = e
+      done()
+    })
+    .catch(err => {
+      R.fatal = (err && err.name ? err.name + ': ' : '') + String(err && err.message)
+      done()
+    })
+})()
+</script>
+</body>
+</html>

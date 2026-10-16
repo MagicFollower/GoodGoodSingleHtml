@@ -196,5 +196,65 @@
   "sha1": "c0971dfacce746782e18a5ad00816ace0641f39c",
   "bytes": 5272,
   "when": "2026-10-16T07:21:56.173Z"
+ },
+ "https://cdn.jsdelivr.net/npm/@typopro/web-fantasque-sans-mono@3.7.5/TypoPRO-FantasqueSansMono-Regular.woff": {
+  "file": "tools/.cache/89f9f1bca994225eab8b.font",
+  "sha1": "c9fd06f1e5e80900ff77b061982a2e0a0687bb78",
+  "bytes": 29080,
+  "when": "2026-10-16T10:48:18.754Z"
+ },
+ "https://cdn.jsdelivr.net/npm/@fontsource/fira-code@5.3.0/files/fira-code-latin-400-normal.woff2": {
+  "file": "tools/.cache/44a0ff49b470b650e298.font",
+  "sha1": "58f7ef12a51b0f6fb237f0233b82d84f3c3eb3c2",
+  "bytes": 23312,
+  "when": "2026-10-16T10:48:24.252Z"
+ },
+ "https://cdn.jsdelivr.net/npm/hack-font@3.3.0/build/web/fonts/hack-regular-subset.woff2": {
+  "file": "tools/.cache/3995f35b6f1cadd168e5.font",
+  "sha1": "1590848bfd6c93218898e64c924f8cd121b0499d",
+  "bytes": 23244,
+  "when": "2026-10-16T10:48:25.244Z"
+ },
+ "https://cdn.jsdelivr.net/npm/@fontsource/ibm-plex-mono@5.3.0/files/ibm-plex-mono-latin-400-normal.woff2": {
+  "file": "tools/.cache/a7e98c46b3ec6a46a725.font",
+  "sha1": "bb87500e3204a3a7c65d6633c79c5c840c3be8d3",
+  "bytes": 14708,
+  "when": "2026-10-16T10:48:26.641Z"
+ },
+ "https://cdn.jsdelivr.net/npm/@fontsource/inconsolata@5.3.0/files/inconsolata-latin-400-normal.woff2": {
+  "file": "tools/.cache/4ee33e54e6a6d24ae32d.font",
+  "sha1": "2bc8e1ea9f86fa5726c8299674ee904a13dafda2",
+  "bytes": 17664,
+  "when": "2026-10-16T10:48:29.483Z"
+ },
+ "https://cdn.jsdelivr.net/npm/@fontsource/jetbrains-mono@5.3.0/files/jetbrains-mono-latin-400-normal.woff2": {
+  "file": "tools/.cache/9f90af931cf1068fab78.font",
+  "sha1": "3ae621518210e658f2cec928e0c3aede6d0cefe2",
+  "bytes": 21168,
+  "when": "2026-10-16T10:48:32.705Z"
+ },
+ "https://cdn.jsdelivr.net/npm/@typopro/web-monoid@3.7.5/TypoPRO-Monoid-Regular.woff": {
+  "file": "tools/.cache/1e8a7ceabd332db28758.font",
+  "sha1": "9c73572896eab8f23333847a325a0fd0bf0c3d5e",
+  "bytes": 21392,
+  "when": "2026-10-16T10:48:33.452Z"
+ },
+ "https://cdn.jsdelivr.net/npm/@fontsource/source-code-pro@5.3.1/files/source-code-pro-latin-400-normal.woff2": {
+  "file": "tools/.cache/e9c14688f7ce9037bbb8.font",
+  "sha1": "ef3384bd224690bff9310f8c56964351c5522ed3",
+  "bytes": 11656,
+  "when": "2026-10-16T10:48:38.637Z"
+ },
+ "https://cdn.jsdelivr.net/npm/@fontsource/space-mono@5.3.0/files/space-mono-latin-400-normal.woff2": {
+  "file": "tools/.cache/36241c8316a981c881b2.font",
+  "sha1": "e2ee2d370f0d46ca5a113126da3b58e16240fdec",
+  "bytes": 16520,
+  "when": "2026-10-16T10:48:40.556Z"
+ },
+ "https://cdn.jsdelivr.net/npm/@fontsource/ubuntu-mono@5.3.0/files/ubuntu-mono-latin-400-normal.woff2": {
+  "file": "tools/.cache/39f089302482648db3ce.font",
+  "sha1": "5f09ce6800531eb903038013786779e70fe88c2d",
+  "bytes": 27300,
+  "when": "2026-10-16T10:48:45.218Z"
  }
 }

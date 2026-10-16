@@ -1,0 +1,109 @@
+/*
+ * css/fonts.css — 由 tools/build-fonts.js 生成，请勿手改（改了会被下次重算覆盖）。
+ * 13 段 @font-face 对应 data/settings.js 里 CARBON.FONTS[].id，family 名必须逐字相同。
+ * 子集口径：latin（与上游 Google Fonts 的 latin 子集同范围），所以 CJK 仍回退系统字体 —— 与线上一致。
+ */
+
+@font-face {
+  font-family: 'Anonymous Pro';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('../fonts/anonymous-pro.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Cascadia Code';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('../fonts/cascadia-code.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Droid Sans Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('../fonts/droid-sans-mono.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Fantasque Sans Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('../fonts/fantasque-sans-mono.woff') format('woff');
+}
+
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('../fonts/fira-code.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Hack';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('../fonts/hack.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('../fonts/ibm-plex-mono.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inconsolata';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('../fonts/inconsolata.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('../fonts/jetbrains-mono.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Monoid';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('../fonts/monoid.woff') format('woff');
+}
+
+@font-face {
+  font-family: 'Source Code Pro';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('../fonts/source-code-pro.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Space Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('../fonts/space-mono.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Ubuntu Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('../fonts/ubuntu-mono.woff2') format('woff2');
+}

@@ -53,6 +53,40 @@
     return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   }
 
+  /* 成图吃不吃所选字体，取决于 dom-to-image 能不能读到 @font-face —— 它扫的是 document.styleSheets[].cssRules，
+   * 而 file:// 下**外链**样式表的 cssRules 一律抛 SecurityError（实测 tools/probe/verify5-facecss.html：
+   * css/fonts.css → SecurityError，同一文档的内联表 → ok）。读不到的后果不是报错，是导出的图用系统回退字体
+   * 画字（实测 tools/probe/verify4-exportfont.html：修复前导出 SVG 里 @font-face 段数 0，三个不同族名光栅化后
+   * 墨迹宽度全等于 monospace）。所以 file:// 下把 data/fonts.js 那份 data: URI 字体表挂成内联 <style>；
+   * http:// 下外链本来就读得到，继续走 dom-to-image 自己的抓取+内联（与线上同构），不重复挂。 */
+  function linkedFontFacesReadable() {
+    const sheets = g.document && g.document.styleSheets
+    if (!sheets) return false
+    for (const sh of Array.prototype.slice.call(sheets)) {
+      if (!sh.href) continue
+      try {
+        const rules = sh.cssRules
+        for (const r of rules) {
+          if (r.type === g.CSSRule.FONT_FACE_RULE) return true
+        }
+      } catch (e) {
+        /* file:// 下外链样式表抛 SecurityError，继续看下一张 */
+      }
+    }
+    return false
+  }
+
+  function ensureFontFaceStyle() {
+    if (!g.document || g.document.getElementById('carbon-font-faces')) return
+    if (linkedFontFacesReadable()) return
+    const css = CARBON.FONT_FACES_CSS
+    if (!css) return
+    const st = g.document.createElement('style')
+    st.id = 'carbon-font-faces'
+    st.appendChild(g.document.createTextNode(css))
+    ;(g.document.head || g.document.documentElement).appendChild(st)
+  }
+
   const exporter = {
     supportsClipboard: function () {
       return !!(g.navigator && g.navigator.clipboard && g.navigator.clipboard.write && g.ClipboardItem)
@@ -60,6 +94,7 @@
 
     /* format: 'png' | 'svg' | 'blob'（blob 即 PNG 的 Blob 形态，与上游一致） */
     getImage(opts) {
+      ensureFontFaceStyle()
       const o = opts || {}
       const s = CARBON.store.state
       const format = o.format || 'png'

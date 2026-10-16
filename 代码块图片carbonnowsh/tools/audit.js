@@ -425,6 +425,61 @@ check('CSS 结构', () => {
   return `规则块 ${open} 配平；变量定义 ${defined.size}，引用 ${uses.length}，其中 JS 现设 ${jsInjected.length}（${jsInjected.join(',') || '无'}）`
 })
 
+check('hidden 真隐藏（作者层 display 盖不掉它）', () => {
+  const css = stripCssComments(fs.readFileSync(path.join(ROOT, 'css/app.css'), 'utf8'))
+  /* 按"选择器 → 声明块"扫，要求其中一条的选择器就是裸 [hidden]，
+   * 而不是只匹配到 .popout[hidden] 那种带类名的（那种救不了 .row{display:flex}） */
+  const rules = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)]
+  const hiddenRules = rules.filter(m =>
+    m[1].split(',').some(s => s.trim().replace(/\s+/g, ' ') === '[hidden]')
+  )
+  assert(hiddenRules.length, 'css/app.css 缺裸 [hidden] 兜底规则：JS 大量用 el.hidden = bool 切行/切区块')
+  assert(
+    hiddenRules.some(m => /display\s*:\s*none\s*!important/.test(m[2])),
+    '[hidden] 必须是 display:none !important —— 同特异性的 .row{display:flex} 之类会盖掉不带 !important 的写法'
+  )
+  /* 暴露面统计：CSS 里定了 display 的类，有多少同时被 JS 当元素类名用（这些就是靠全局兜底压住的） */
+  const displayClasses = new Set(
+    [...css.matchAll(/\.([a-z][a-z0-9_-]+)[^{}]*\{[^}]*display\s*:/g)].map(m => m[1])
+  )
+  const jsFiles = fs
+    .readdirSync(path.join(ROOT, 'js'), { recursive: true })
+    .filter(f => /\.js$/.test(String(f)))
+    .map(f => fs.readFileSync(path.join(ROOT, 'js', String(f)), 'utf8'))
+    .join('\n')
+  const shared = [...displayClasses].filter(c => new RegExp("['\" ]" + c + "['\" ]").test(jsFiles))
+  return `[hidden]{display:none !important} 就位；带作者层 display 且被 JS 当类名用的有 ${shared.length} 个（全靠这条兜底）`
+})
+
+/* ---------------------------------------------------------------- 成图字体链路 */
+
+check('成图字体链路（预览外链 + 成图内联表）', () => {
+  const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8')
+  const exp = fs.readFileSync(path.join(ROOT, 'js', 'export.js'), 'utf8')
+  const face = fs.readFileSync(path.join(ROOT, 'data', 'fonts.js'), 'utf8')
+  assert(/href="css\/fonts\.css"/.test(html), 'index.html 没引 css/fonts.css → 预览没有字体')
+  assert(/src="data\/fonts\.js"/.test(html), 'index.html 没引 data/fonts.js → 成图没有字体（file:// 下外链表的 cssRules 读不到）')
+
+  /* 挂载必须真的发生在调 domtoimage 之前。找"调用点"而不是函数名：
+   * 函数定义行 `function ensureFontFaceStyle() {` 也含 `ensureFontFaceStyle()`，
+   * 直接 indexOf('ensureFontFaceStyle()') 会先命中定义，判据就永远是绿的（假绿）。 */
+  const callAt = [...exp.matchAll(/(?<!function )ensureFontFaceStyle\(\)/g)].map(m => m.index)
+  assert(callAt.length, 'js/export.js 里 ensureFontFaceStyle 只有定义、没有调用')
+  const useAt = exp.indexOf('domtoimage.to')
+  assert(useAt > 0, 'js/export.js 里找不到 domtoimage.to* 调用')
+  assert(Math.min(...callAt) < useAt, `ensureFontFaceStyle() 的调用点(${Math.min(...callAt)})晚于 domtoimage.to(${useAt})，字体表来不及挂上`)
+
+  const fams = [...face.matchAll(/font-family:'([^']+)'/g)].map(m => m[1])
+  assert(fams.length === C.FONTS.length, `data/fonts.js 有 ${fams.length} 段 @font-face，CARBON.FONTS 有 ${C.FONTS.length} 个族`)
+  const missing = C.FONTS.map(f => f.id).filter(id => fams.indexOf(id) < 0)
+  assert(!missing.length, 'data/fonts.js 缺族（下拉里这些选项切了能看但导不出）：' + missing.join(','))
+  const extra = fams.filter(f => !C.FONTS.some(x => x.id === f))
+  assert(!extra.length, 'data/fonts.js 有多余族：' + extra.join(','))
+  const b64 = (face.match(/src:url\(data:font\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]{200,}\) format\('(woff2|woff|truetype)'\)/g) || []).length
+  assert(b64 === C.FONTS.length, `data/fonts.js 里带闭合的 data: URI 只有 ${b64} 条，应为 ${C.FONTS.length} 条`)
+  return `${fams.length} 族双向对齐；挂载调用点 ${Math.min(...callAt)} 早于 domtoimage.to ${useAt}`
+})
+
 /* ---------------------------------------------------------------- 上游副本完整性 */
 
 check('dom-to-image 保留上游前缀', () => {
@@ -517,8 +572,23 @@ if (!QUICK) {
     assert(r.status === 0, '退出码 ' + r.status + '\n' + String(r.stderr || '').split('\n').slice(0, 10).join('\n'))
     return 'data/ 与上游一致'
   })
+  check('build-fonts --check', () => {
+    const r = cp.spawnSync(process.execPath, [path.join(ROOT, 'tools', 'build-fonts.js'), '--check'], {
+      encoding: 'utf8',
+      cwd: ROOT,
+    })
+    assert(r.status === 0, '退出码 ' + r.status + '\n' + String(r.stdout || '').split('\n').slice(0, 4).join('\n') + '\n' + String(r.stderr || '').split('\n').slice(0, 6).join('\n'))
+    const first = String(r.stdout || '').split('\n')[0]
+    /* 13 个族必须和 CARBON.FONTS 逐字对齐，少一个就是下拉里有个选项切了没反应 */
+    const listed = (String(r.stdout || '').match(/^[ \t]+\S+\.woff2?\b|^[ \t]+\S+\.ttf\b/gm) || []).length
+    assert(
+      listed === C.FONTS.length,
+      `fonts/ 只报了 ${listed} 个字体，CARBON.FONTS 有 ${C.FONTS.length} 个`
+    )
+    return first + `（族数与 CARBON.FONTS 的 ${C.FONTS.length} 对齐）`
+  })
 } else {
-  unchecked.push('build-vendor --verify-only / build-data --check — 本次用了 --quick')
+  unchecked.push('build-vendor --verify-only / build-data --check / build-fonts --check — 本次用了 --quick')
 }
 
 /* ---------------------------------------------------------------- 需浏览器才能判的项 */
@@ -532,12 +602,17 @@ const probed = [
   'file:// 下 localStorage 读写 — 同上 storageProbe 与 persist 两步（含 CARBON_STATE 的排除字段）',
   '隐形字符开/关 — 同上 afterInvisibles / afterInvisiblesOff',
   '选中行淡化 — tools/probe/verify2.html「非选中行被淡化」',
-  '自定义主题创建 / 预设应用与撤销 / 三页签设置 — tools/probe/verify2.html 共 43 项',
+  '自定义主题创建 / 预设应用与撤销 / 三页签设置 / hidden 兜底 — tools/probe/verify2.html 共 50 项',
+  '13 个字体族是否各自解析到自己的 face（预览面）— tools/probe/verify3-font.html',
+  '成图里到底嵌没嵌字体 + 光栅化环境能否吃到嵌入 face — tools/probe/verify4-exportfont.html',
+  'file:// 下外链样式表 cssRules 抛 SecurityError、内联表可读（根因）— tools/probe/verify5-facecss.html',
+  '预设落哪个键 / 内置 8 个不落盘 / 配额写不进时静默 — tools/probe/verify6-presetstore.html（全程点真 UI）',
 ]
 
 unchecked.push('真实渲染：125% 系统 DPI 下预览与导出图是否一致 — 无头跑固定 deviceScaleFactor=1，量不到系统缩放；需人眼对照 doc/截图-*.png')
 unchecked.push('剪贴板写入图片（ClipboardItem）— 无头环境无剪贴板权限，且用户手势（Ctrl+C）不可合成')
 unchecked.push('字体上传 new FontFace().load() 成功路径 — 需真实挑选一个本机 ttf/woff 并等异步 load')
+unchecked.push('上传的字体能不能进成图 — fontUrl 走运行时 new FontFace() 注册，不在任何样式表里，dom-to-image 的 cssRules 扫描拿不到它；内置 13 族已证能进图（verify4），这一半没测')
 unchecked.push('拖文件导入（drop 事件带 DataTransfer 文件）— 无头合成 dragenter/drop 拿不到真实 File')
 unchecked.push('PNG/SVG 导出后浏览器另存与「打开」按钮 — 需要真实下载/新标签行为')
 

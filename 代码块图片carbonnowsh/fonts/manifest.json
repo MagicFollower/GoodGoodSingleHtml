@@ -1,0 +1,135 @@
+{
+ "generatedBy": "tools/build-fonts.js",
+ "fonts": [
+  {
+   "id": "Anonymous Pro",
+   "slug": "anonymous-pro",
+   "file": "anonymous-pro.woff2",
+   "format": "woff2",
+   "bytes": 17528,
+   "sha1": "4798b6f23a88c4ffe289a3d9e6299e4a1906f4f8",
+   "url": "https://cdn.jsdelivr.net/npm/@fontsource/anonymous-pro@5.3.0/files/anonymous-pro-latin-400-normal.woff2",
+   "note": "fontsource 官方打包，latin 子集"
+  },
+  {
+   "id": "Cascadia Code",
+   "slug": "cascadia-code",
+   "file": "cascadia-code.woff2",
+   "format": "woff2",
+   "bytes": 29452,
+   "sha1": "5b6f5e5ab2495707c373af7763972a78be195a56",
+   "url": "https://cdn.jsdelivr.net/npm/@fontsource/cascadia-code@5.3.0/files/cascadia-code-latin-400-normal.woff2",
+   "note": "fontsource 官方打包，latin 子集"
+  },
+  {
+   "id": "Droid Sans Mono",
+   "slug": "droid-sans-mono",
+   "file": "droid-sans-mono.ttf",
+   "format": "ttf",
+   "bytes": 32944,
+   "sha1": "781658eecef9746f9156a43a860741ea4977a8d6",
+   "url": "https://fonts.gstatic.com/s/droidsansmono/v21/6NUO8FuJNQ2MbkrZ5-J8lKFrp7pRef2u.ttf",
+   "note": "fontsource/typeface 都没有这个族（Google 已下架该族），只能取 gstatic 的钉版 TTF"
+  },
+  {
+   "id": "Fantasque Sans Mono",
+   "slug": "fantasque-sans-mono",
+   "file": "fantasque-sans-mono.woff",
+   "format": "woff",
+   "bytes": 29080,
+   "sha1": "c9fd06f1e5e80900ff77b061982a2e0a0687bb78",
+   "url": "https://cdn.jsdelivr.net/npm/@typopro/web-fantasque-sans-mono@3.7.5/TypoPRO-FantasqueSansMono-Regular.woff",
+   "note": "fontsource 无此族，取 @typopro 的 woff（Chrome 全支持 woff1）"
+  },
+  {
+   "id": "Fira Code",
+   "slug": "fira-code",
+   "file": "fira-code.woff2",
+   "format": "woff2",
+   "bytes": 23312,
+   "sha1": "58f7ef12a51b0f6fb237f0233b82d84f3c3eb3c2",
+   "url": "https://cdn.jsdelivr.net/npm/@fontsource/fira-code@5.3.0/files/fira-code-latin-400-normal.woff2",
+   "note": "fontsource 官方打包，latin 子集"
+  },
+  {
+   "id": "Hack",
+   "slug": "hack",
+   "file": "hack.woff2",
+   "format": "woff2",
+   "bytes": 23244,
+   "sha1": "1590848bfd6c93218898e64c924f8cd121b0499d",
+   "url": "https://cdn.jsdelivr.net/npm/hack-font@3.3.0/build/web/fonts/hack-regular-subset.woff2",
+   "note": "fontsource 无此族，取 Source Foundry 官方 npm hack-font 的 subset 版（全量版 106 KB）"
+  },
+  {
+   "id": "IBM Plex Mono",
+   "slug": "ibm-plex-mono",
+   "file": "ibm-plex-mono.woff2",
+   "format": "woff2",
+   "bytes": 14708,
+   "sha1": "bb87500e3204a3a7c65d6633c79c5c840c3be8d3",
+   "url": "https://cdn.jsdelivr.net/npm/@fontsource/ibm-plex-mono@5.3.0/files/ibm-plex-mono-latin-400-normal.woff2",
+   "note": "fontsource 官方打包，latin 子集"
+  },
+  {
+   "id": "Inconsolata",
+   "slug": "inconsolata",
+   "file": "inconsolata.woff2",
+   "format": "woff2",
+   "bytes": 17664,
+   "sha1": "2bc8e1ea9f86fa5726c8299674ee904a13dafda2",
+   "url": "https://cdn.jsdelivr.net/npm/@fontsource/inconsolata@5.3.0/files/inconsolata-latin-400-normal.woff2",
+   "note": "fontsource 官方打包，latin 子集"
+  },
+  {
+   "id": "JetBrains Mono",
+   "slug": "jetbrains-mono",
+   "file": "jetbrains-mono.woff2",
+   "format": "woff2",
+   "bytes": 21168,
+   "sha1": "3ae621518210e658f2cec928e0c3aede6d0cefe2",
+   "url": "https://cdn.jsdelivr.net/npm/@fontsource/jetbrains-mono@5.3.0/files/jetbrains-mono-latin-400-normal.woff2",
+   "note": "fontsource 官方打包，latin 子集"
+  },
+  {
+   "id": "Monoid",
+   "slug": "monoid",
+   "file": "monoid.woff",
+   "format": "woff",
+   "bytes": 21392,
+   "sha1": "9c73572896eab8f23333847a325a0fd0bf0c3d5e",
+   "url": "https://cdn.jsdelivr.net/npm/@typopro/web-monoid@3.7.5/TypoPRO-Monoid-Regular.woff",
+   "note": "fontsource 无此族（Google 已下架），取 @typopro 的 woff"
+  },
+  {
+   "id": "Source Code Pro",
+   "slug": "source-code-pro",
+   "file": "source-code-pro.woff2",
+   "format": "woff2",
+   "bytes": 11656,
+   "sha1": "ef3384bd224690bff9310f8c56964351c5522ed3",
+   "url": "https://cdn.jsdelivr.net/npm/@fontsource/source-code-pro@5.3.1/files/source-code-pro-latin-400-normal.woff2",
+   "note": "fontsource 官方打包，latin 子集"
+  },
+  {
+   "id": "Space Mono",
+   "slug": "space-mono",
+   "file": "space-mono.woff2",
+   "format": "woff2",
+   "bytes": 16520,
+   "sha1": "e2ee2d370f0d46ca5a113126da3b58e16240fdec",
+   "url": "https://cdn.jsdelivr.net/npm/@fontsource/space-mono@5.3.0/files/space-mono-latin-400-normal.woff2",
+   "note": "fontsource 官方打包，latin 子集"
+  },
+  {
+   "id": "Ubuntu Mono",
+   "slug": "ubuntu-mono",
+   "file": "ubuntu-mono.woff2",
+   "format": "woff2",
+   "bytes": 27300,
+   "sha1": "5f09ce6800531eb903038013786779e70fe88c2d",
+   "url": "https://cdn.jsdelivr.net/npm/@fontsource/ubuntu-mono@5.3.0/files/ubuntu-mono-latin-400-normal.woff2",
+   "note": "fontsource 官方打包，latin 子集"
+  }
+ ]
+}

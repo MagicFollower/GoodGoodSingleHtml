@@ -10,6 +10,7 @@
     <title>verify2</title>
     <link rel="stylesheet" href="../../vendor/codemirror.min.css" />
     <link rel="stylesheet" href="../../css/app.css" />
+    <link rel="stylesheet" href="../../css/fonts.css" />
     <script>
       window.__errs = []
       window.addEventListener('error', e => window.__errs.push(String(e.message)))
@@ -69,6 +70,7 @@
     <script src="../../data/languages.js"></script>
     <script src="../../data/presets.js"></script>
     <script src="../../data/svg.js"></script>
+    <script src="../../data/fonts.js"></script>
     <script src="../../js/util.js"></script>
     <script src="../../js/url.js"></script>
     <script src="../../js/state.js"></script>
@@ -263,6 +265,55 @@
           await tick(150)
           step('撤销回到应用前主题', store.state.theme === beforePreset.t, { t: store.state.theme })
         }
+
+        /* 5b hidden 必须真隐藏：作者层的 display:flex 会盖掉 UA 的 [hidden]{display:none}，
+         * 表现就是"点了没反应"。这一组只量 computed display，不看状态位（状态位是假绿源）。 */
+        const disp = el => (el ? getComputedStyle(el).display : null)
+        const rowByLabel = txt => qa('.settings-row').find(d => (d.querySelector('label') || {}).textContent === txt)
+        step('撤销后"已应用预设"条真的不画', disp(q('.settings-presets-applied')) === 'none', {
+          display: disp(q('.settings-presets-applied')),
+        })
+        click(q('.settings-presets-toggle'))
+        await tick()
+        step('预设收起按钮把内容真隐藏', disp(q('.settings-presets-content')) === 'none', {
+          display: disp(q('.settings-presets-content')),
+        })
+        click(q('.settings-presets-toggle'))
+        await tick()
+        step('预设再点一次恢复展开', disp(q('.settings-presets-content')) === 'flex', {
+          display: disp(q('.settings-presets-content')),
+        })
+        store.set({ windowControls: false, dropShadow: false, widthAdjustment: true })
+        await tick(150)
+        const offReadings = {
+          wc: disp(q('.window-controls')),
+          shadow: disp(q('.drop-shadow-options')),
+          w: disp(rowByLabel('宽度')),
+        }
+        step('关掉后这些行/区块真的不画', Object.values(offReadings).every(d => d === 'none'), offReadings)
+        store.set({ windowControls: true, dropShadow: true, widthAdjustment: false })
+        await tick(150)
+        const onReadings = {
+          wc: disp(q('.window-controls')),
+          shadow: disp(q('.drop-shadow-options')),
+          w: disp(rowByLabel('宽度')),
+        }
+        step('重新打开后它们又都画出来', Object.values(onReadings).every(d => d && d !== 'none'), onReadings)
+        /* 起始行号那行在「编辑器」页签里，页签是换 tab 才重挂的，所以切过去再量 */
+        click(tabs[1])
+        await tick()
+        store.set({ lineNumbers: false })
+        await tick(150)
+        step('关行号后起始行号行真的不画', disp(rowByLabel('起始行号')) === 'none', {
+          display: disp(rowByLabel('起始行号')),
+        })
+        store.set({ lineNumbers: true })
+        await tick(150)
+        step('开行号后起始行号行又画出来', disp(rowByLabel('起始行号')) === 'flex', {
+          display: disp(rowByLabel('起始行号')),
+        })
+        click(tabs[0])
+        await tick()
 
         /* 6 自定义主题 */
         click(q('[data-slot="theme-dropdown"] .dropdown-display'))

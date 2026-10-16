@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<!--
+  tools/probe/verify4-exportfont.html — 导出面的字体定向探针
+  判据要分清两件事：
+    ① 预览：换 fontFamily 后页面上那段文字的实测宽度变不变（verify3 已证会变小/变大）；
+    ② 成图：dom-to-image 出的 PNG/SVG 里，字体到底带没带进去。
+  ②不能靠"预览变了所以成图也该变"推断：SVG 是用 <img> 光栅化的，光栅化环境里
+  外部字体文件根本取不到，只有把字体烘成 data: URI 塞进图里才可能生效。
+  所以这里对同一份代码分别用两个 advance 明显不同的族 + 一个不存在的族各导一次图，
+  比对成图字节哈希与 SVG 里的 @font-face 数量。
+-->
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>verify4 export font</title>
+    <link rel="stylesheet" href="../../vendor/codemirror.min.css" />
+    <link rel="stylesheet" href="../../css/app.css" />
+    <link rel="stylesheet" href="../../css/fonts.css" />
+  </head>
+  <body>
+    <main class="page">
+      <section class="editor">
+        <div class="toolbar" id="toolbar">
+          <div data-slot="theme-dropdown"></div>
+          <div data-slot="language-dropdown"></div>
+          <div class="toolbar-second-row">
+            <div class="setting-buttons">
+              <div data-slot="background-select"></div>
+              <div data-slot="settings"></div>
+              <div data-slot="copy-menu"></div>
+            </div>
+            <div class="share-buttons"><div data-slot="export-menu"></div></div>
+          </div>
+        </div>
+        <div class="canvas-area" id="canvas-area">
+          <div class="drop-overlay" id="drop-overlay" hidden></div>
+          <div class="export-container" id="export-container">
+            <div class="container" id="canvas-container">
+              <div class="window-controls" id="window-controls" hidden></div>
+              <div class="CodeMirror__container" id="editor-host"></div>
+              <div class="watermark-host" id="watermark-host"></div>
+              <div class="container-bg">
+                <div class="white eliminateOnRender"></div>
+                <div class="alpha eliminateOnRender"></div>
+                <div class="bg" id="canvas-bg"></div>
+              </div>
+              <div class="handler" id="width-handler" hidden></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+    <div class="toast-host" id="toast-host"></div>
+
+    <script src="../../vendor/codemirror.min.js"></script>
+    <script src="../../vendor/addons.js"></script>
+    <script src="../../vendor/modes.js"></script>
+    <script src="../../vendor/custom-modes.js"></script>
+    <script src="../../vendor/hljs.min.js"></script>
+    <script src="../../vendor/hljs-languages.js"></script>
+    <script src="../../vendor/dom-to-image.js"></script>
+    <script src="../../data/settings.js"></script>
+    <script src="../../data/themes.js"></script>
+    <script src="../../data/languages.js"></script>
+    <script src="../../data/presets.js"></script>
+    <script src="../../data/svg.js"></script>
+    <script src="../../data/fonts.js"></script>
+    <script src="../../js/util.js"></script>
+    <script src="../../js/url.js"></script>
+    <script src="../../js/state.js"></script>
+    <script src="../../js/theme.js"></script>
+    <script src="../../js/invisibles.js"></script>
+    <script src="../../js/editor.js"></script>
+    <script src="../../js/render.js"></script>
+    <script src="../../js/export.js"></script>
+    <script src="../../js/ui/widgets.js"></script>
+    <script src="../../js/ui/panels.js"></script>
+    <script src="../../js/app.js"></script>
+
+    <script>
+      const R = { cases: [], notes: [] }
+      const CODE = 'const a = 1\nlet bb = 22\n'
+      const BOGUS = 'NoSuchFontForProbe12345'
+      /* 这两个族的字符宽实测差得开（advance 7.643 vs 8.4+），预览一定能看出来 */
+      const FAMS = ['Anonymous Pro', 'Space Mono', BOGUS]
+
+      /* 不依赖 crypto.subtle（file:// 下不一定算安全上下文），自己写一个够用的散列 */
+      function fnv1a(buf) {
+        const v = new Uint8Array(buf)
+        let h = 0x811c9dc5
+        for (let i = 0; i < v.length; i++) {
+          h ^= v[i]
+          h = Math.imul(h, 0x01000193) >>> 0
+        }
+        return h.toString(16).padStart(8, '0') + ':' + v.length
+      }
+
+      /* 无头页里异步链会被虚拟时间掐住，悬挂时必须看出"挂在哪一步"，而不是整个 run 静默不返回
+       * （http:// 口径第一次跑就是这么没的：cases=0、fatal 为空、summary 也没写） */
+      function withTimeout(p, label, ms) {
+        return Promise.race([
+          Promise.resolve(p),
+          new Promise(res => setTimeout(() => res('__STALLED__ ' + label), ms || 25000)),
+        ])
+      }
+
+      /* 成图字节：PNG 走 blob 形态（与"导出/复制"同一条路），自己散列，不依赖 crypto.subtle */
+      async function pngHash() {
+        const blob = await withTimeout(CARBON.exporter.getImage({ format: 'blob', exportSize: 1 }), 'blob')
+        if (typeof blob === 'string') return blob
+        const buf = await blob.arrayBuffer()
+        return fnv1a(buf)
+      }
+
+      /* 把一段只有 foreignObject 文本的 SVG 当图片光栅化，量白字在透明底上的墨迹横向跨度。
+       * faceCss 给不为空时把 @font-face 一起塞进 SVG 内部 —— 这正是导出图能吃到字体的机制。 */
+      async function inkWidth(stack, faceCss) {
+        const style = faceCss ? '<style>' + faceCss + '</style>' : ''
+        const svg =
+          '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="40">' +
+          '<foreignObject width="400" height="40">' +
+          '<div xmlns="http://www.w3.org/1999/xhtml">' +
+          style +
+          '<div style="font:22px ' + stack + ';color:#fff;white-space:pre">MMMMMMMMMM</div>' +
+          '</div></foreignObject></svg>'
+        const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg)
+        const img = await new Promise((res, rej) => {
+          const i = new Image()
+          i.onload = () => res(i)
+          i.onerror = () => rej(new Error('SVG 光栅化失败: ' + stack))
+          i.src = url
+        })
+        const c = document.createElement('canvas')
+        c.width = 400
+        c.height = 40
+        const x = c.getContext('2d')
+        x.drawImage(img, 0, 0)
+        const d = x.getImageData(0, 0, 400, 40).data
+        let minX = 1e9,
+          maxX = -1
+        for (let px = 0; px < 400; px++) {
+          for (let py = 0; py < 40; py++) {
+            if (d[(py * 400 + px) * 4 + 3] > 0) {
+              if (px < minX) minX = px
+              if (px > maxX) maxX = px
+            }
+          }
+        }
+        return maxX < 0 ? null : maxX - minX + 1
+      }
+
+      async function run() {
+        await new Promise(r => setTimeout(r, 700))
+        const store = CARBON.store
+        store.set({ code: CODE, language: 'plaintext', fontFamily: 'Anonymous Pro', watermark: false, lineNumbers: false })
+        await new Promise(r => setTimeout(r, 400))
+        R.notes.push('scheme=' + location.protocol)
+
+        for (const fam of FAMS) {
+          try {
+            await document.fonts.load('14px "' + fam + '"', CODE)
+          } catch (e) {
+            R.notes.push(fam + ' fonts.load 抛错: ' + e.message)
+          }
+          store.set({ fontFamily: fam })
+          await new Promise(r => setTimeout(r, 200))
+
+          const live = document.querySelector('#editor-host .CodeMirror-line')
+          let previewWidth = null
+          if (live && live.firstChild) {
+            const rg = document.createRange()
+            rg.selectNodeContents(live)
+            previewWidth = Math.round(rg.getBoundingClientRect().width * 100) / 100
+          }
+
+          R.stage = '导出前 ' + fam
+          flush()
+          const svgBlob = await withTimeout(CARBON.exporter.getImage({ format: 'svg' }), 'svg ' + fam)
+          if (typeof svgBlob === 'string') {
+            R.cases.push({ fam, stalled: svgBlob })
+            flush()
+            continue
+          }
+          const svgText = await svgBlob.text()
+          const faceHits = (svgText.match(/@font-face/g) || []).length
+          const srcHits = [...svgText.matchAll(/@font-face[^}]*?src:\s*url\(([^)]{0,40})/g)].map(m => m[1])
+          const familyHits = [...svgText.matchAll(/@font-face[^}]*?font-family:\s*([^;]{0,30})/g)].map(m => m[1].trim())
+          /* 把整条 @font-face 抄下来（base64 省略），两口径的字节差就能对着看而不是靠猜 */
+          const faceRule = (svgText.match(/@font-face\s*\{[^}]*\}/) || ['(无)'])[0].replace(/base64,[A-Za-z0-9+/=]+/, 'base64,…')
+          R.cases.push({
+            fam,
+            svgFaceRule: faceRule,
+            computedOnLine: live ? getComputedStyle(live).fontFamily : null,
+            previewWidth,
+            svgBytes: svgBlob.size,
+            svgFontFaceCount: faceHits,
+            svgFontFamilies: familyHits,
+            svgFontSrcHeads: srcHits,
+            pngHash: await pngHash(),
+          })
+          flush()
+        }
+
+        /* 光栅化环境的字体解析能力对照（注册表实测本机只装了 Cascadia Code / Consolas，
+         * Anonymous Pro、Space Mono 都不在）：
+         *   不嵌 face → 未装的族必然与 monospace 同宽；
+         *   把 data: URI 的 face 嵌进 SVG → 宽度必须拉开，否则"嵌进去就够了"这条机制是假的。 */
+        const faceOf = id =>
+          String(CARBON.FONT_FACES_CSS || '')
+            .split('\n')
+            .find(l => l.indexOf("@font-face{font-family:'" + id + "';") === 0) || null
+        const anonFace = faceOf('Anonymous Pro')
+        const spaceFace = faceOf('Space Mono')
+        R.raster = {
+          anonFaceFound: !!anonFace,
+          anonBare: await inkWidth("'Anonymous Pro', monospace"),
+          bogusBare: await inkWidth('NoSuchFontForProbe12345, monospace'),
+          monoBare: await inkWidth('monospace'),
+          consolasBare: await inkWidth("'Consolas', monospace"),
+          anonEmbedded: anonFace ? await inkWidth("'Anonymous Pro', monospace", anonFace) : null,
+          spaceEmbedded: spaceFace ? await inkWidth("'Space Mono', monospace", spaceFace) : null,
+        }
+
+        const real = R.cases.filter(c => c.fam !== BOGUS)
+        const bogusCase = R.cases.find(c => c.fam === BOGUS)
+        const distinctPreview = new Set(R.cases.map(c => c.previewWidth)).size
+        const distinctPng = new Set(real.map(c => c.pngHash)).size
+        R.summary = {
+          cases: R.cases.length,
+          distinctPreviewWidths: distinctPreview,
+          /* 只比两个真族：bogus 的图本来就该是回退字体 */
+          distinctRealPngHashes: distinctPng,
+          svgFontFaceCounts: R.cases.map(c => c.svgFontFaceCount),
+          svgBytes: R.cases.map(c => c.svgBytes),
+          /* 成图里嵌进去的族名必须就是当前选的族（postProcessSvg 会把别的族删掉，与上游同口径） */
+          embeddedFamilyMatches: real.every(c => c.svgFontFamilies.some(f => f.replace(/"/g, '') === c.fam)),
+          bogusHasNoFace: bogusCase ? bogusCase.svgFontFaceCount === 0 : null,
+          /* 预览与成图两层都换得出字体 */
+          previewHonorsFont: distinctPreview === R.cases.length,
+          exportHonorsFont: distinctPng === real.length,
+          /* 对照组：本机装了 Consolas → 光栅化能吃上；没装的族不嵌 face 就吃不上（这条是"为什么必须嵌"的凭据） */
+          installedFamilyResolvesBare: R.raster.consolasBare !== R.raster.monoBare,
+          bundledFamilyMissingBare: R.raster.anonBare === R.raster.bogusBare && R.raster.anonBare === R.raster.monoBare,
+          embeddedFaceChangesRaster: R.raster.anonEmbedded !== null && R.raster.anonEmbedded !== R.raster.anonBare,
+        }
+      }
+
+      let pre = null
+      function flush() {
+        if (!pre) {
+          pre = document.createElement('pre')
+          document.body.appendChild(pre)
+        }
+        pre.textContent = 'EXPORTFONT_JSON' + JSON.stringify(R, null, 1)
+      }
+
+      window.addEventListener('load', () => {
+        flush()
+        run()
+          .catch(e => {
+            R.fatal = e && e.message ? e.message : String(e)
+          })
+          .then(flush)
+      })
+    </script>
+  </body>
+</html>
