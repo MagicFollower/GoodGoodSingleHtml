@@ -1,0 +1,959 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>G2 图片圆角化</title>
+<style>
+/* ---------- 形状令牌（G2 接入 A1：保底圆弧 + corner-shape 增强层） ---------- */
+:root{
+  --g2-shape: squircle;              /* p=4，真角形；增强层用 */
+  --r-xs:4px; --r-sm:8px; --r-md:12px; --r-lg:16px; --r-xl:24px; --r-pill:9999px;
+  --radius-card:var(--r-md); --radius-btn:var(--r-sm); --radius-input:var(--r-sm);
+
+  --bg:#101317; --surface:#171b21; --surface-2:#1e232b; --line:#2b323c;
+  --fg:#e7ecf2; --fg-dim:#98a3b2; --accent:#4d9bff; --ok:#3fb877; --warn:#e8a13a; --bad:#e5605f;
+  --font:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme:light){
+  :root{
+    --bg:#f4f6f9; --surface:#ffffff; --surface-2:#eef1f5; --line:#d7dde5;
+    --fg:#1a1f26; --fg-dim:#5c6773; --accent:#1f6feb; --ok:#1a8a55; --warn:#b5761a; --bad:#c23b3a;
+    color-scheme:light;
+  }
+}
+
+*{box-sizing:border-box}
+[hidden]{display:none !important}   /* .drop 等有 author display 规则，会盖掉 UA 的 [hidden] */
+html,body{height:100%}
+body{
+  margin:0; background:var(--bg); color:var(--fg); font-family:var(--font);
+  font-size:14px; line-height:1.5;
+}
+
+/* 保底：卡片/按钮/输入框一律先写 border-radius，再按需增强 */
+.card,.btn,.chip,input[type=range],.seg,.readout,.notice{border-radius:var(--radius-card)}
+.btn,.chip{border-radius:var(--radius-btn)}
+.seg button{border-radius:var(--radius-btn)}
+input[type=color]{border-radius:var(--radius-input)}
+
+@supports (corner-shape: squircle){
+  .card,.btn,.chip,.seg,.readout,.notice{corner-shape:var(--g2-shape)}
+  .seg button{corner-shape:var(--g2-shape)}
+  input[type=color]{corner-shape:var(--g2-shape)}
+}
+
+header{
+  display:flex; align-items:baseline; gap:14px; flex-wrap:wrap;
+  padding:16px 20px 10px;
+}
+header h1{font-size:17px; margin:0; letter-spacing:.02em}
+.caps{display:flex; gap:6px; flex-wrap:wrap}
+.cap{
+  font-size:11px; font-family:ui-monospace,Consolas,monospace;
+  padding:2px 8px; border:1px solid var(--line); border-radius:var(--r-pill); color:var(--fg-dim);
+}
+.cap.on{color:var(--ok); border-color:var(--ok)}
+.cap.off{color:var(--bad); border-color:var(--bad)}
+
+main{
+  display:grid; grid-template-columns:minmax(0,1fr) 400px; gap:16px;
+  padding:0 20px 24px; align-items:start;
+}
+@media (max-width:1000px){ main{grid-template-columns:minmax(0,1fr)} }
+
+.card{
+  background:var(--surface); border:1px solid var(--line); padding:14px; min-width:0;
+}
+@supports (corner-shape: squircle){ .card{corner-shape:var(--g2-shape)} }
+
+.stage-card{display:flex; flex-direction:column; gap:10px; min-height:60vh}
+.stage-box{
+  position:relative; flex:1; display:grid; place-items:center;
+  min-height:320px; max-height:70vh; overflow:visible; /* 不裁剪：祖先圆弧裁剪会削平后代的 G2 角 */
+}
+canvas#stage{
+  display:block;
+  /* 透明角后面露出的棋盘格，证明导出体确实带 alpha */
+  background-image:
+    conic-gradient(from 0deg, var(--surface-2) 0 25%, transparent 0 50%, var(--surface-2) 0 75%, transparent 0);
+  background-size:16px 16px;
+}
+canvas#stage.hidden{display:none}
+.drop{
+  position:absolute; inset:0; display:grid; place-items:center; text-align:center;
+  border:1.5px dashed var(--line); color:var(--fg-dim); cursor:pointer; padding:20px;
+}
+.drop.over{border-color:var(--accent); color:var(--accent); background:var(--surface-2)}
+.drop small{display:block; margin-top:6px; font-size:12px; opacity:.75}
+
+.meta{display:flex; gap:10px; flex-wrap:wrap; font-size:12px; color:var(--fg-dim); font-family:ui-monospace,Consolas,monospace}
+.meta b{color:var(--fg); font-weight:600}
+
+.panel{display:flex; flex-direction:column; gap:12px}
+.panel h2{
+  font-size:12px; margin:0 0 10px; letter-spacing:.12em; text-transform:uppercase; color:var(--fg-dim); font-weight:600;
+}
+.row{display:flex; align-items:center; gap:10px; margin-bottom:10px}
+.row:last-child{margin-bottom:0}
+.row.wrap{flex-wrap:wrap}
+.grow{flex:1; min-width:0}
+label.check{display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none}
+input[type=checkbox]{width:16px; height:16px; accent-color:var(--accent); cursor:pointer}
+input[type=radio]{width:14px; height:14px; accent-color:var(--accent); cursor:pointer}
+.muted{color:var(--fg-dim); font-size:12px}
+.mono{font-family:ui-monospace,Consolas,monospace; font-size:12px}
+.hint{font-size:12px; color:var(--fg-dim); margin-top:6px}
+.hint.warn{color:var(--warn)}
+
+input[type=range]{
+  -webkit-appearance:none; appearance:none; width:100%; height:6px;
+  background:var(--surface-2); border:1px solid var(--line); outline:none; cursor:pointer;
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none; width:16px; height:16px; background:var(--accent); border:none;
+  border-radius:var(--r-pill);
+}
+@supports (corner-shape: squircle){ input[type=range]::-webkit-slider-thumb{corner-shape:squircle} }
+input[type=range]:disabled{opacity:.4; cursor:not-allowed}
+input[type=color]{width:34px; height:24px; border:1px solid var(--line); background:none; padding:1px; cursor:pointer}
+
+.seg{display:flex; gap:4px; padding:4px; background:var(--surface-2); border:1px solid var(--line)}
+.seg button{
+  flex:1; padding:7px 6px; border:none; background:transparent; color:var(--fg-dim);
+  font:inherit; font-size:12px; cursor:pointer; white-space:nowrap;
+}
+.seg button[aria-pressed=true]{background:var(--accent); color:#fff}
+.seg button:disabled{opacity:.45; cursor:not-allowed}
+
+.chips{display:flex; gap:6px; flex-wrap:wrap}
+.chip{
+  padding:6px 10px; border:1px solid var(--line); background:var(--surface-2); color:var(--fg-dim);
+  font:inherit; font-size:12px; cursor:pointer; text-align:left;
+}
+.chip[aria-pressed=true]{border-color:var(--accent); color:var(--fg); background:color-mix(in srgb, var(--accent) 18%, var(--surface-2))}
+.chip:disabled{opacity:.42; cursor:not-allowed}
+.chip .p{display:block; font-family:ui-monospace,Consolas,monospace; font-size:10px; opacity:.7}
+
+.btn{
+  padding:9px 14px; border:1px solid var(--line); background:var(--surface-2); color:var(--fg);
+  font:inherit; cursor:pointer;
+}
+.btn.primary{background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600}
+.btn:disabled{opacity:.45; cursor:not-allowed}
+.btn:hover:not(:disabled){filter:brightness(1.12)}
+
+.readout{background:var(--surface-2); border:1px solid var(--line); padding:9px 11px; font-size:12px}
+table.audit{width:100%; border-collapse:collapse; font-family:ui-monospace,Consolas,monospace; font-size:10.5px;
+  font-variant-numeric:tabular-nums}
+table.audit th,table.audit td{padding:3px 3px; text-align:right; white-space:nowrap}
+table.audit th{color:var(--fg-dim); font-weight:500; border-bottom:1px solid var(--line)}
+table.audit th:first-child,table.audit td:first-child{text-align:left; white-space:normal}
+table.audit th:last-child,table.audit td:last-child{padding-right:0}
+.grade-g2{color:var(--ok)} .grade-g1{color:var(--warn)}
+.notice{padding:8px 10px; font-size:12px; background:var(--surface-2); border:1px solid var(--line)}
+.notice.bad{border-color:var(--bad); color:var(--bad)}
+svg.spark{display:block; width:100%; height:96px; margin-top:8px; background:var(--surface-2);
+  border:1px solid var(--line); border-radius:var(--r-sm)}
+footer{padding:0 20px 24px; font-size:11px; color:var(--fg-dim); font-family:ui-monospace,Consolas,monospace}
+</style>
+</head>
+<body>
+<header>
+  <h1>G2 图片圆角化</h1>
+  <div class="caps" id="caps"></div>
+</header>
+
+<main>
+  <section class="card stage-card">
+    <div class="stage-box" id="stageBox">
+      <canvas id="stage" class="hidden"></canvas>
+      <div class="drop" id="drop">
+        <div>
+          把图片拖进来 / 点击选择文件<br>
+          <small>也支持 Ctrl+V 粘贴。全部在本地完成，不上传。</small>
+        </div>
+      </div>
+    </div>
+    <input type="file" id="file" accept="image/*" hidden>
+    <div class="row">
+      <div class="meta grow" id="meta"></div>
+      <button class="btn" id="pick" hidden>换一张</button>
+    </div>
+  </section>
+
+  <aside class="panel">
+    <div class="card">
+      <h2>1 · 圆角化</h2>
+      <div class="row">
+        <label class="check"><input type="checkbox" id="enabled" checked> 启用圆角（默认开）</label>
+      </div>
+      <div class="row">
+        <div class="grow">
+          <div class="row"><span class="mono" id="rLabel">半径</span><span class="grow"></span><span class="mono" id="rVal"></span></div>
+          <input type="range" id="radius" min="0" max="100" value="24" step="1">
+        </div>
+      </div>
+      <div class="chips" id="rPresets"></div>
+      <div class="hint" id="rNote"></div>
+      <div class="row" style="margin-top:12px"><span class="muted">形状档（p = 2^v，superellipse）</span></div>
+      <div class="chips" id="shapes"></div>
+      <div class="readout mono" id="gate" style="margin-top:10px"></div>
+    </div>
+
+    <div class="card">
+      <h2>2 · 范围与区域选择</h2>
+      <div class="seg" role="group" aria-label="圆角范围">
+        <button id="modeFull" aria-pressed="true">整图</button>
+        <button id="modeRegion" aria-pressed="false">指定区域</button>
+      </div>
+      <div class="hint" id="selHint">整图模式：对图片外框做圆角。</div>
+      <div class="row" style="margin-top:10px">
+        <span class="mono grow" id="selRead">未选择区域</span>
+        <button class="btn" id="selClear" disabled>清除选区</button>
+      </div>
+      <div class="hint">在图上按住拖拽画框 · 框内拖动=移动 · 角点=缩放。选区即导出范围。</div>
+    </div>
+
+    <div class="card">
+      <h2>3 · 导出</h2>
+      <div class="row">
+        <label class="check"><input type="checkbox" id="compress"> 高效压缩（默认不勾选 = PNG 无损带透明）</label>
+      </div>
+      <div id="compBox" hidden>
+        <div class="seg" role="group" aria-label="压缩格式" id="fmtSeg"></div>
+        <div class="row" style="margin-top:12px">
+          <span class="mono" id="qLabel">质量</span><span class="grow"></span><span class="mono" id="qVal"></span>
+        </div>
+        <input type="range" id="quality" min="30" max="100" value="82" step="1">
+        <div class="row wrap" style="margin-top:10px" id="bgRow" hidden>
+          <span class="mono">圆角外底色</span>
+          <input type="color" id="bg" value="#ffffff">
+          <span class="muted" id="bgNote"></span>
+        </div>
+      </div>
+      <div class="readout mono" id="outRead" style="margin-top:10px"></div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn primary grow" id="export" disabled>按原始像素导出</button>
+      </div>
+      <div class="notice" id="result" hidden></div>
+    </div>
+
+    <div class="card">
+      <h2>4 · 曲率自检（判据）</h2>
+      <div id="auditTable"></div>
+      <div class="hint" id="auditVerdict"></div>
+      <svg class="spark" id="spark" viewBox="0 0 300 96" preserveAspectRatio="none" aria-label="κ 随弧长 s 的 log-log 剖面"></svg>
+      <div class="hint">上图：横轴 log s（0.0156→2px）、纵轴 log κ。圆弧是一条水平线（κ 恒为 1/r ⇒ G1）；G2 档是一条斜率 p−2 的上升直线。</div>
+    </div>
+  </aside>
+</main>
+
+<footer>几何与判据代码来自 g2-corner-integration skill（κ 用解析导数、θ 网格取 i^4、段数按折线容差律 s=√(8ε/κ峰值)）。页面本身也走 corner-shape，与导出图的角形同族。</footer>
+
+<script type="module">
+/* ============================================================
+   几何模块（g2-corners.mjs 内联）
+   ============================================================ */
+const kappa = (c, t) => {
+  const [x1, y1] = c.d1(t), [x2, y2] = c.d2(t);
+  return Math.abs(x1 * y2 - y1 * x2) / Math.pow(x1 * x1 + y1 * y1, 1.5);
+};
+const cl = (v, e) => Math.pow(Math.max(0, v), e);   // 分数次幂钳位：θ 越界会得到 NaN，整表作废
+const arcCorner = (r) => ({
+  tMax: Math.PI / 2,
+  P: (t) => [r - r * Math.cos(t), r - r * Math.sin(t)],
+  d1: (t) => [r * Math.sin(t), -r * Math.cos(t)],
+  d2: (t) => [r * Math.cos(t), r * Math.sin(t)],
+});
+const superCorner = (r, p) => {
+  const m = 2 / p;
+  return {
+    tMax: Math.PI / 2,
+    P: (t) => [r - r * cl(Math.cos(t), m), r - r * cl(Math.sin(t), m)],
+    d1: (t) => [r * m * cl(Math.cos(t), m - 1) * Math.sin(t), -r * m * cl(Math.sin(t), m - 1) * Math.cos(t)],
+    d2: (t) => [r * m * (cl(Math.cos(t), m) - (m - 1) * cl(Math.cos(t), m - 2) * Math.sin(t) ** 2),
+                -r * m * ((m - 1) * cl(Math.sin(t), m - 2) * Math.cos(t) ** 2 - cl(Math.sin(t), m))],
+  };
+};
+const flatCubicCorner = (r) => ({            // 两端 κ=0 ⇒ G2；几何等价 p≈5.19
+  tMax: 1,
+  P: (u) => [r * u ** 3, r * (1 - u) ** 3],
+  d1: (u) => [3 * r * u * u, -3 * r * (1 - u) * (1 - u)],
+  d2: (u) => [6 * r * u, 6 * r * (1 - u)],
+});
+function peakKappa(c, n = 360) {
+  let k = 0;
+  for (let i = 1; i < n; i++) k = Math.max(k, kappa(c, c.tMax * i / n));
+  return k;
+}
+function arcLength(c, to = c.tMax, n = 600) {
+  let L = 0, prev = c.P(0);
+  for (let i = 1; i <= n; i++) { const q = c.P(to * i / n); L += Math.hypot(q[0] - prev[0], q[1] - prev[1]); prev = q; }
+  return L;
+}
+const maxChord = (eps, kPeak) => Math.sqrt(8 * eps / kPeak);
+const segPerCorner = (c, eps) => Math.ceil(arcLength(c) / maxChord(eps, peakKappa(c)));
+function usedRadius(w, h, r) {               // getComputedStyle 读不回用过值，判据自己算
+  const f = Math.min(1, w / (2 * r), h / (2 * r));
+  return { f, used: r * f, bitten: f < 1, kSeam: 1 / (r * f) };
+}
+function cornerGate(p, r, w) {
+  const k = peakKappa(superCorner(r, p));
+  return { p, r, kPeak: k, safeInner: 1 / k, want: w, ok: 1 / k >= 1.2 * w };
+}
+function rectPath(w, h, r) {                  // 平端 C 段：无采样即 G2
+  const R = Math.min(r, w / 2, h / 2);
+  return `M ${R},0 H ${w - R} C ${w},0 ${w},0 ${w},${R} V ${h - R} C ${w},${h} ${w},${h} ${w - R},${h}`
+       + ` H ${R} C 0,${h} 0,${h} 0,${h - R} V ${R} C 0,0 0,0 ${R},0 Z`;
+}
+function rectPoints(w, h, r, p, eps = 0.5) {
+  const R = Math.min(r, w / 2, h / 2);
+  const c = superCorner(R, p), seg = segPerCorner(c, eps);
+  const A = []; for (let i = 0; i <= seg; i++) A.push(c.P((Math.PI / 2) * i / seg));
+  const mx = ([x, y]) => [w - x, y], my = ([x, y]) => [x, h - y], mxy = ([x, y]) => [w - x, h - y];
+  const pts = [];
+  const push = (q) => { const l = pts[pts.length - 1];
+    if (!l || Math.abs(l[0] - q[0]) > 1e-9 || Math.abs(l[1] - q[1]) > 1e-9) pts.push([+q[0].toFixed(3), +q[1].toFixed(3)]); };
+  push([R, 0]); push([w - R, 0]);
+  A.slice().reverse().forEach((q) => push(mx(q)));
+  push([w, h - R]);
+  A.forEach((q) => push(mxy(q)));
+  push([R, h]);
+  A.slice().reverse().forEach((q) => push(my(q)));
+  push([0, R]);
+  A.forEach((q) => push(q));
+  return pts;
+}
+const svgPolyOf = (pts) =>
+  `M ${pts[0][0]},${pts[0][1]} ${pts.slice(1).map((q) => `L ${q[0]},${q[1]}`).join(' ')} Z`;
+
+function sTable(c, N = 6000) {                // i^4 网格：近接缝要有分辨率
+  const out = []; let prev = c.P(0), s = 0;
+  for (let i = 1; i <= N; i++) {
+    const t = c.tMax * Math.pow(i / N, 4), q = c.P(t);
+    s += Math.hypot(q[0] - prev[0], q[1] - prev[1]); prev = q;
+    out.push({ s, k: kappa(c, t) });
+  }
+  return out;
+}
+const kAtS = (g, s) => g.reduce((b, p) => Math.abs(p.s - s) < Math.abs(b.s - s) ? p : b, g[0]);
+function j1(c, sA = 0.25, sB = 0.0156) {      // ≥2 ⇒ G2；圆弧恒 1.00×
+  const g = sTable(c), a = kAtS(g, sA), b = kAtS(g, sB);
+  return { ratio: a.k / Math.max(b.k, 1e-30), sA, sB };
+}
+function j2(c) {                              // log-log 斜率 ≈ p−2；≥1.2 ⇒ 够 G3
+  const g = sTable(c).filter((p) => p.s >= 0.25 && p.s <= 2 && p.k > 1e-9);
+  let sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (const p of g) { const x = Math.log(p.s), y = Math.log(p.k); sx += x; sy += y; sxx += x * x; sxy += x * y; }
+  return (g.length * sxy - sx * sy) / (g.length * sxx - sx * sx);
+}
+function j3Corner(c, seg, N = 1200) {         // 逐参照点取最近线段，再取最大
+  const poly = []; for (let i = 0; i <= seg; i++) poly.push(c.P(c.tMax * i / seg));
+  let worst = 0;
+  for (let i = 0; i <= N; i++) {
+    const p = c.P(c.tMax * i / N);
+    let d = Infinity;
+    for (let k = 0; k < poly.length - 1; k++) {
+      const a = poly[k], b = poly[k + 1];
+      const abx = b[0] - a[0], aby = b[1] - a[1], L2 = abx * abx + aby * aby;
+      const t = Math.max(0, Math.min(1, L2 ? ((p[0] - a[0]) * abx + (p[1] - a[1]) * aby) / L2 : 0));
+      d = Math.min(d, Math.hypot(p[0] - (a[0] + t * abx), p[1] - (a[1] + t * aby)));
+    }
+    worst = Math.max(worst, d);
+  }
+  return worst;
+}
+/* 从曲线对象直接取闸门（平端贝塞尔没有整数 p，走这条） */
+function gateOfCurve(c, wantW) {
+  const k = peakKappa(c);
+  return { kPeak: k, safeInner: 1 / k, want: wantW, ok: 1 / k >= 1.2 * wantW };
+}
+
+/* ============================================================
+   能力探测（§0）：本机现测，不引用别人的数字
+   ============================================================ */
+function detectG2() {
+  const s = (prop, value) => { try { return CSS.supports(prop, value); } catch { return false; } };
+  return {
+    cornerShape: s('corner-shape', 'squircle'),
+    superellipseAny: s('corner-shape', 'superellipse(2.322)'),
+    borderShape: s('border-shape', 'squircle'),
+    clipShape: s('clip-path', 'shape(rect(0px 10px 10px 0px))'),
+    ctxRoundRect: typeof CanvasRenderingContext2D !== 'undefined' && 'roundRect' in CanvasRenderingContext2D.prototype,
+  };
+}
+const CAPS = detectG2();
+document.getElementById('caps').innerHTML = Object.entries(CAPS)
+  .map(([k, v]) => `<span class="cap ${v ? 'on' : 'off'}">${k}:${v}</span>`).join('')
+  + `<span class="cap">${navigator.userAgent.match(/(Chrome|Firefox|Safari)\/[\d.]+/)?.[0] || '?'}</span>`;
+
+/* ============================================================
+   形状档
+   ============================================================ */
+const SHAPES = {
+  arc:   { label: '圆弧 round',        v: 1,      p: 2,      kind: 'arc',   note: 'G1：接缝 κ 从 0 跳到 1/r' },
+  soft:  { label: '柔和 squircle-lite', v: 1.4,   p: 2 ** 1.4, kind: 'super', note: 'p≈2.64，比 squircle 温和' },
+  squircle: { label: 'squircle',       v: 2,      p: 4,      kind: 'super', note: 'p=4，Apple 系手感' },
+  deep:  { label: '深曲率',            v: 2.322,  p: 5,      kind: 'super', note: 'p=5，G3 有余量，描边余量更小' },
+  cubic: { label: '平端贝塞尔',         v: null,   p: 5.19,   kind: 'cubic', note: '解析 C 段，两端 κ=0，等价 p≈5.19' },
+};
+const RENDER_EPS = 0.05;    // 对齐阈值（折线容差律）；可见阈值的 0.5px 只用于对照展示
+
+/* ============================================================
+   状态
+   ============================================================ */
+const S = {
+  name: 'image', srcBytes: 0,
+  src: null,            // HTMLCanvasElement，自然像素
+  W: 0, H: 0,
+  enabled: true,
+  shapeKey: 'squircle',
+  radius: 24,           // 图像像素，针对当前有效框
+  mode: 'full',         // full | region
+  sel: null,            // {x,y,w,h} 图像像素
+  compress: false,
+  format: 'webp',
+  quality: 82,
+  bg: '#ffffff',
+  lastMs: 0,
+  lastSizes: null,      // { out, png, label }：上次导出的实测体积，只用于读数展示
+};
+
+const els = {};
+['stage','stageBox','drop','file','meta','enabled','radius','rLabel','rVal','rPresets','rNote','shapes','gate',
+ 'modeFull','modeRegion','selHint','selRead','selClear','compress','compBox','fmtSeg','quality','qLabel','qVal',
+ 'bgRow','bg','bgNote','outRead','export','pick','result','auditTable','auditVerdict','spark']
+  .forEach((id) => els[id] = document.getElementById(id));
+
+const encodable = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 8;
+  const ok = (mime) => { try { return c.toDataURL(mime).startsWith('data:' + mime); } catch { return false; } };
+  return { 'image/png': true, 'image/jpeg': ok('image/jpeg'), 'image/webp': ok('image/webp'), 'image/avif': ok('image/avif') };
+})();
+const FORMATS = [
+  { key: 'png',  mime: 'image/png',  ext: 'png', label: 'PNG 无损', alpha: true },
+  { key: 'webp', mime: 'image/webp', ext: 'webp', label: 'WebP', alpha: true },
+  { key: 'avif', mime: 'image/avif', ext: 'avif', label: 'AVIF', alpha: true },
+  { key: 'jpeg', mime: 'image/jpeg', ext: 'jpg', label: 'JPEG', alpha: false },
+];
+const fmtOf = (key) => FORMATS.find((f) => f.key === key);
+const fmtSize = (n) => n == null ? '—' : n > 1048576 ? (n / 1048576).toFixed(2) + ' MB' : (n / 1024).toFixed(1) + ' KB';
+/* 默认压缩格式必须是本机真能编码的：toBlob 遇到不认识的 mime 会静默退回 PNG，那样体积对比就是假的 */
+S.format = (encodable['image/webp'] && 'webp') || (encodable['image/jpeg'] && 'jpeg') || 'png';
+
+/* 有效框：整图=外框，区域=选框 */
+function activeBox() {
+  if (S.mode === 'region' && S.sel) return S.sel;
+  return { x: 0, y: 0, w: S.W, h: S.H };
+}
+
+/* ============================================================
+   遮罩路径与绘制
+   ============================================================ */
+function maskD(w, h, R, shape) {
+  if (shape.kind === 'cubic') return rectPath(w, h, R);
+  return svgPolyOf(rectPoints(w, h, R, shape.p, RENDER_EPS));
+}
+function applyMask(ctx, w, h, R, shape) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.fillStyle = '#000';
+  ctx.fill(new Path2D(maskD(w, h, R, shape)));
+  ctx.restore();
+}
+function cornerCurve(shape, R) {
+  return shape.kind === 'arc' ? arcCorner(R) : shape.kind === 'cubic' ? flatCubicCorner(R) : superCorner(R, shape.p);
+}
+
+/* 离屏：把 src 的 (sx,sy,sw,sh) 以 dw×dh 像素尺寸圆角化后画到 dest 当前变换的 (dx,dy,sw,sh) */
+const tmp = document.createElement('canvas');
+const tmpCtx = tmp.getContext('2d');
+let stageK = 1;   // stage 画布 device px / 图像 px
+function blitRounded(dest, sx, sy, sw, sh, dx, dy, R, shape) {
+  const dw = Math.max(1, Math.round(sw * stageK)), dh = Math.max(1, Math.round(sh * stageK));
+  tmp.width = dw; tmp.height = dh;
+  tmpCtx.setTransform(1, 0, 0, 1, 0, 0);
+  tmpCtx.clearRect(0, 0, dw, dh);
+  tmpCtx.drawImage(S.src, sx, sy, sw, sh, 0, 0, dw, dh);
+  if (S.enabled && R > 0.5) applyMask(tmpCtx, dw, dh, R * stageK, shape);
+  dest.drawImage(tmp, 0, 0, dw, dh, dx, dy, sw, sh);
+}
+
+/* ============================================================
+   渲染舞台
+   ============================================================ */
+function render() {
+  if (!S.src) return;
+  const t0 = performance.now();
+  const shape = SHAPES[S.shapeKey];
+  const box = els.stageBox.getBoundingClientRect();
+  const availW = Math.max(80, box.width), availH = Math.max(80, Math.min(box.height, window.innerHeight * 0.7));
+  const cssScale = Math.min(availW / S.W, availH / S.H, 4);
+  const cssW = Math.max(1, Math.round(S.W * cssScale)), cssH = Math.max(1, Math.round(S.H * cssScale));
+  const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+  els.stage.style.width = cssW + 'px'; els.stage.style.height = cssH + 'px';
+  els.stage.width = Math.round(cssW * dpr); els.stage.height = Math.round(cssH * dpr);
+  const ctx = els.stage.getContext('2d');
+  stageK = els.stage.width / S.W;                       // device px / 图像 px
+  ctx.setTransform(stageK, 0, 0, stageK, 0, 0);
+  ctx.clearRect(0, 0, S.W, S.H);
+
+  if (S.mode === 'full') {
+    blitRounded(ctx, 0, 0, S.W, S.H, 0, 0, usedR().used, shape);
+  } else {
+    ctx.drawImage(S.src, 0, 0, S.W, S.H, 0, 0, S.W, S.H);
+    const sel = S.sel;
+    if (sel && sel.w >= 1 && sel.h >= 1) {
+      drawChecker(ctx, sel);
+      blitRounded(ctx, sel.x, sel.y, sel.w, sel.h, sel.x, sel.y, usedR().used, shape);
+      // 框外压暗：只做视觉，不用 clip-path 裁切（裁剪与圆角不同族会把外鼓的超椭圆角削平）
+      ctx.save();
+      ctx.clip(new Path2D(`M0,0 H${S.W} V${S.H} H0 Z M${sel.x},${sel.y} h${sel.w} v${sel.h} h${-sel.w} Z`), 'evenodd');
+      ctx.fillStyle = 'rgba(0,0,0,.5)';
+      ctx.fillRect(0, 0, S.W, S.H);
+      ctx.restore();
+      drawSelUI(ctx, sel);
+    }
+  }
+  S.lastMs = performance.now() - t0;
+  updateReadouts();
+}
+
+function usedR() {
+  const b = activeBox();
+  if (!b.w || !b.h) return { f: 1, used: 0, bitten: false };
+  return usedRadius(b.w, b.h, Math.max(S.radius, 0.001));   // 传声明值：让 f 缩放自己去咬，别预夹
+}
+
+function drawChecker(ctx, sel) {
+  const cell = Math.max(4, Math.round(Math.min(sel.w, sel.h) / 12));
+  ctx.save();
+  ctx.beginPath(); ctx.rect(sel.x, sel.y, sel.w, sel.h); ctx.clip();
+  ctx.fillStyle = 'rgba(0,0,0,.55)';                    // 先压暗：圆角外的这块不会出现在导出图里
+  ctx.fillRect(sel.x, sel.y, sel.w, sel.h);
+  ctx.fillStyle = 'rgba(255,255,255,.22)';
+  for (let y = sel.y; y < sel.y + sel.h; y += cell)
+    for (let x = sel.x; x < sel.x + sel.w; x += cell)
+      if (((x - sel.x) / cell | 0) % 2 !== ((y - sel.y) / cell | 0) % 2) ctx.fillRect(x, y, cell, cell);
+  ctx.restore();
+}
+
+const HS = 9;                                            // 角点手柄的 CSS 像素尺寸
+function handleRects(sel) {
+  const s = HS / stageK;                                 // 换算到图像 px
+  return [
+    { id: 'nw', x: sel.x - s / 2, y: sel.y - s / 2, s },
+    { id: 'ne', x: sel.x + sel.w - s / 2, y: sel.y - s / 2, s },
+    { id: 'sw', x: sel.x - s / 2, y: sel.y + sel.h - s / 2, s },
+    { id: 'se', x: sel.x + sel.w - s / 2, y: sel.y + sel.h - s / 2, s },
+  ];
+}
+function drawSelUI(ctx, sel) {
+  const k = 1 / stageK;
+  ctx.save();
+  ctx.lineWidth = 1.5 * k;
+  ctx.strokeStyle = '#4d9bff';
+  ctx.setLineDash([6 * k, 4 * k]);
+  ctx.strokeRect(sel.x, sel.y, sel.w, sel.h);
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#4d9bff';
+  handleRects(sel).forEach((h) => {
+    ctx.fillRect(h.x, h.y, h.s, h.s);
+    ctx.lineWidth = 1 * k; ctx.strokeStyle = '#fff'; ctx.strokeRect(h.x, h.y, h.s, h.s);
+  });
+  const txt = `${Math.round(sel.w)}×${Math.round(sel.h)}`;
+  ctx.font = `${Math.round(12 * k)}px ui-monospace,Consolas,monospace`;
+  const tw = ctx.measureText(txt).width, pad = 5 * k;
+  ctx.fillStyle = 'rgba(20,24,30,.86)';
+  ctx.fillRect(sel.x, sel.y - 20 * k, tw + pad * 2, 18 * k);
+  ctx.fillStyle = '#fff';
+  ctx.fillText(txt, sel.x + pad, sel.y - 7 * k);
+  ctx.restore();
+}
+
+/* ============================================================
+   读数 / 闸门 / 自检
+   ============================================================ */
+let auditKey = '';
+function updateReadouts() {
+  if (!S.src) {
+    els.rVal.textContent = '—';
+    els.rNote.textContent = '先载入一张图片（拖入 / 点击 / Ctrl+V）。';
+    els.gate.textContent = '载入后按"用过半径"给出闸门与判据';
+    els.selRead.textContent = '未选择区域';
+    els.selClear.disabled = true;
+    els.outRead.textContent = '输出 —';
+    els.export.disabled = true;
+    els.auditTable.innerHTML = '';
+    els.auditVerdict.textContent = '载入图片后给出：圆弧对照组 + 当前档的 J1 / J2 / J3。';
+    return;
+  }
+  const shape = SHAPES[S.shapeKey];
+  const box = activeBox();
+  const ur = usedR();
+  els.rVal.textContent = S.enabled ? `${Math.round(S.radius)}px → 用过 ${ur.used.toFixed(1)}px` : '关';
+  const bite = ur.bitten;
+  els.rNote.className = 'hint' + (bite ? ' warn' : '');
+  els.rNote.textContent = bite
+    ? `半径被短边咬：声明 ${Math.round(S.radius)}px 实际只用 ${ur.used.toFixed(1)}px（f=${ur.f.toFixed(4)}）。短边 ${Math.round(Math.min(box.w, box.h))}px，最大可用 ${Math.round(Math.min(box.w, box.h) / 2)}px。`
+    : (S.enabled ? shape.note : '圆角已关闭，导出即原图（PNG 直存）。');
+
+  const R = Math.max(ur.used, 0.001);
+  const gate = gateOfCurve(cornerCurve(shape, R), 2);
+  els.gate.innerHTML = S.enabled
+    ? `档 p=${shape.p.toFixed(2)} · κ峰值=${gate.kPeak.toExponential(4)} · 描边/inset 上限 ${gate.safeInner.toFixed(3)}px（2px ${gate.ok ? '有余量' : '会自交'}）`
+      + `<br>有效框 ${Math.round(box.w)}×${Math.round(box.h)} · 接缝跳变 Δκ=${(1 / R).toExponential(4)}`
+      + (shape.kind === 'arc' ? '<br><span style="color:var(--warn)">当前是圆弧档：J1≈1.00 ⇒ 只有 G1</span>' : '')
+    : `圆角关闭 · 有效框 ${Math.round(box.w)}×${Math.round(box.h)}`;
+
+  els.selRead.textContent = S.sel ? `选区 ${Math.round(S.sel.w)}×${Math.round(S.sel.h)} @ (${Math.round(S.sel.x)},${Math.round(S.sel.y)}) 图像px` : '未选择区域';
+  els.selClear.disabled = !S.sel;
+  els.selHint.textContent = S.mode === 'full'
+    ? '整图模式：对图片外框做圆角。'
+    : (S.sel ? '区域模式：导出 = 选区裁出并圆角（角外透明）。' : '区域模式：在图上拖一个框，框即导出范围。');
+
+  const out = exportSize();
+  const L = S.lastSizes && S.lastSizes.sig === exportSig() ? S.lastSizes : null;
+  const pre = S.compress
+    ? (L && L.png ? `${fmtSize(L.png)}（同参数 PNG；源文件 ${fmtSize(S.srcBytes)}）`
+                  : `${fmtSize(S.srcBytes)}（源文件；同参数 PNG 待导出实测）`)
+    : `源文件 ${fmtSize(S.srcBytes)}`;
+  const post = !L ? '导出后给出'
+    : S.compress ? `${fmtSize(L.out)}（${L.label}${L.png ? '，' + saveNote(L.out, L.png) : ''}）`
+    : `${fmtSize(L.out)}（PNG 无损，未压缩）`;
+  els.outRead.innerHTML = `输出 <b>${out.w}×${out.h}</b> px · ${fmtLabel()}`
+    + `<br>压缩前 ${pre} → 压缩后 ${post}`
+    + (out.w > 4096 || out.h > 4096 ? '<br><span style="color:var(--warn)">长边超 4096：部分平台会重采样</span>' : '');
+  els.export.disabled = false;
+
+  const key = `${S.shapeKey}|${R.toFixed(2)}|${S.enabled}`;   // 拖拽选区时不必每帧重算判据
+  if (key !== auditKey) { auditKey = key; renderAudit(shape, R); }
+}
+function fmtLabel() {
+  if (!S.compress) return 'PNG 无损 · 带透明';
+  const f = fmtOf(S.format);
+  return `${f.label}${f.key === 'png' ? '' : ' q' + (S.quality / 100).toFixed(2)} · ${f.alpha ? '带透明' : '底色 ' + S.bg}`;
+}
+const saveNote = (after, before) => !before || after >= before
+  ? (before ? `反而大 ${(100 * (after / before - 1)).toFixed(1)}%` : '')
+  : `省 ${(100 * (1 - after / before)).toFixed(1)}%`;
+/* 只有与当前设置完全一致的那次导出，体积数字才能拿来报 */
+function exportSig() {
+  const b = activeBox(), ur = usedR();
+  return `${S.compress ? S.format + '@' + S.quality : 'png'}|${Math.round(b.w)}x${Math.round(b.h)}`
+       + `|${S.enabled ? S.shapeKey + '@' + ur.used.toFixed(1) : 'off'}|${S.bg}`;
+}
+function exportSize() {
+  const b = activeBox();
+  return { w: Math.max(1, Math.round(b.w)), h: Math.max(1, Math.round(b.h)) };
+}
+
+function renderAudit(shape, R) {
+  const rows = [];
+  const mk = (label, p, c, expectP) => {
+    const { ratio } = j1(c), slope = j2(c), k = peakKappa(c);
+    return { name: label, p: p.toFixed(2), j1: ratio,
+             expect: expectP == null ? null : Math.pow(0.25 / 0.0156, expectP - 2),
+             slope, k, inner: 1 / k,
+             grade: ratio < 2 ? 'G1' : (slope >= 1.2 ? 'G2+够G3' : 'G2') };
+  };
+  rows.push(mk('圆弧（对照）', 2, arcCorner(R), 2));
+  if (shape.kind !== 'arc') {
+    // 平端贝塞尔不是超椭圆族，(sA/sB)^(p-2) 这个解析期望对它不成立 → 期望列留空
+    rows.push(shape.kind === 'cubic'
+      ? mk('平端贝塞尔', shape.p, flatCubicCorner(R), null)
+      : mk('当前档', shape.p, superCorner(R, shape.p), shape.p));
+  }
+  const cur = cornerCurve(shape, R);
+  const seg = S.enabled ? segPerCorner(cur, RENDER_EPS) : 0;
+  const dev = seg ? j3Corner(cur, seg) : 0;
+  const num = (v) => Math.abs(v) >= 100 ? v.toFixed(1) : v.toFixed(4);   // 大数不留四位小数，小数不缩成 1.0
+  const cols = [['档', ''], ['p', '超椭圆指数 p = 2^v'], ['J1', 'κ(s=0.25)/κ(s=0.0156)，≥2 ⇒ G2'],
+                ['期望', '解析值 (0.25/0.0156)^(p−2)，只对超椭圆族成立'], ['斜率', 'log-log 斜率 ≈ p−2，≥1.2 ⇒ 够 G3'],
+                ['描边上限', '1/κ峰值 = 最大可用内偏移（border-width / inset）；κ峰值见上方闸门行'], ['判定', '']];
+  els.auditTable.innerHTML = `<table class="audit"><thead><tr>${cols.map(([c, t]) => `<th${t ? ` title="${t}"` : ''}>${c}</th>`).join('')}</tr></thead><tbody>${
+    rows.map((r) => `<tr><td>${r.name}</td><td>${r.p}</td><td>${num(r.j1)}</td><td>${r.expect == null ? '—' : num(r.expect)}</td>`
+      + `<td>${r.slope.toFixed(3)}</td><td>${r.inner.toFixed(1)}</td>`
+      + `<td class="${r.grade === 'G1' ? 'grade-g1' : 'grade-g2'}">${r.grade}</td></tr>`).join('')
+  }</tbody></table>`;
+
+  const ok1 = rows.length > 1 ? rows[1].j1 >= 2 : false;
+  const g1ok = Math.abs(rows[0].j1 - 1) < 0.01 && Math.abs(rows[0].slope) < 0.01;
+  const gates = [2, 3, 4, 5].map((p) => `p${p} ${cornerGate(p, R, 2).safeInner.toFixed(3)}`).join(' / ');
+  els.auditVerdict.innerHTML = S.enabled
+    ? [ `对照组圆弧 J1=${rows[0].j1.toFixed(4)} / 斜率=${rows[0].slope.toFixed(4)} → ${g1ok ? '<span class="grade-g2">判据可信</span>' : '<span style="color:var(--bad)">判据可疑，别信其它行</span>'}`,
+        ok1 ? `当前档 J1=${rows[1].j1.toFixed(2)} ≥2 ⇒ <span class="grade-g2">${rows[1].grade}</span>` : `当前档 ⇒ <span class="grade-g1">G1（圆弧，接缝跳变不可消除；调大半径只会稀释 Δκ，不会变 G2）</span>`,
+        `J3 折线偏离（本页面实际渲染用的段数）：每角 ${seg} 段 → ${dev.toFixed(4)}px（阈值 ${RENDER_EPS}px）${dev <= RENDER_EPS ? ' <span class="grade-g2">PASS</span>' : ' <span style="color:var(--bad)">FAIL</span>'}`,
+        `档位闸门 @ 用过半径 ${R.toFixed(1)}px 的 1/κ峰值：${gates} px（越大越容得下描边）` ]
+      .join('<br>')
+    : '圆角关闭：判据面板仍给出当前档的曲率剖面。';
+
+  drawSpark(shape, R);
+}
+
+function drawSpark(shape, R) {
+  const arc = sTable(arcCorner(R), 1200);
+  const cur = sTable(cornerCurve(shape, R), 1200);
+  const W = 300, H = 96, pad = 6;
+  const xs = (p) => pad + (Math.log10(Math.max(p.s, 1e-4)) + 1.8) * ((W - pad * 2) / 2.2);
+  const kmax = Math.max(...cur.map((p) => p.k), ...arc.map((p) => p.k));
+  const ys = (k) => H - pad - (Math.log10(Math.max(k, 1e-9)) - Math.log10(kmax * 1e-4)) * ((H - pad * 2) / 4);
+  const poly = (g) => g.filter((_, i) => i % 6 === 0).map((p) => `${xs(p).toFixed(1)},${ys(p.k).toFixed(1)}`).join(' ');
+  els.spark.innerHTML =
+    `<polyline fill="none" stroke="var(--fg-dim)" stroke-width="1" stroke-dasharray="3 2" points="${poly(arc)}"/>`
+    + `<polyline fill="none" stroke="var(--accent)" stroke-width="1.6" points="${poly(cur)}"/>`;
+}
+
+/* ============================================================
+   导出
+   ============================================================ */
+async function exportImage() {
+  if (!S.src) return;
+  const b = activeBox(), shape = SHAPES[S.shapeKey], ur = usedR();
+  const ow = Math.max(1, Math.round(b.w)), oh = Math.max(1, Math.round(b.h));
+  const cv = document.createElement('canvas'); cv.width = ow; cv.height = oh;
+  const ctx = cv.getContext('2d');
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(S.src, b.x, b.y, b.w, b.h, 0, 0, ow, oh);
+  if (S.enabled && ur.used > 0.5) applyMask(ctx, ow, oh, ur.used, shape);
+  const f = fmtOf(S.compress ? S.format : 'png');
+  let payload = cv;
+  if (!f.alpha) {                                        // JPEG 不存 alpha：先铺底色再合成
+    const m = document.createElement('canvas'); m.width = ow; m.height = oh;
+    const mc = m.getContext('2d');
+    mc.fillStyle = S.bg; mc.fillRect(0, 0, ow, oh); mc.drawImage(cv, 0, 0);
+    payload = m;
+  }
+  const t0 = performance.now();
+  const blob = await toBlob(payload, f.mime, f.key === 'png' ? undefined : S.quality / 100);
+  if (!blob) { showResult(`编码失败：本机不能出 ${f.mime}`, true); return; }
+  const ms = performance.now() - t0;
+  const base = S.name.replace(/\.[^.]+$/, '');
+  saveBlob(blob, `${base}_${S.mode === 'region' ? 'region' : 'full'}_r${Math.round(ur.used)}_${S.shapeKey}.${f.ext}`);
+  const cur = cornerCurve(shape, Math.max(ur.used, 0.001));
+  const seg = S.enabled ? segPerCorner(cur, RENDER_EPS) : 0;
+  S.lastSizes = { out: blob.size, png: f.key === 'png' ? blob.size : null, label: f.label, sig: exportSig() };
+  const head = () => {
+    const png = S.lastSizes.png;
+    return `已导出 ${f.label} · ${ow}×${oh} · 编码 ${ms.toFixed(0)}ms`
+      + `<br>压缩前 ${f.key === 'png' ? `源文件 ${fmtSize(S.srcBytes)}` : `${png ? '同参数 PNG ' + fmtSize(png) : '同参数 PNG 待测'}（源文件 ${fmtSize(S.srcBytes)}）`}`
+      + ` → 压缩后 <b>${fmtSize(blob.size)}</b>${f.key === 'png' ? '（PNG 无损，未压缩）' : '，' + (saveNote(blob.size, png) || '对照量完显示')}`
+      + (seg ? `<br>导出几何：每角 ${seg} 段，J3=${j3Corner(cur, seg).toFixed(4)}px（阈值 ${RENDER_EPS}px）；预览耗时 ${S.lastMs.toFixed(0)}ms` : '');
+  };
+  showResult(head());
+  updateReadouts();                                    // 输出读数同步带上体积
+  if (f.key === 'png') return;
+  const p = await toBlob(payload, 'image/png');         // 对照只是参考信息，不该拖住已经落盘的下载
+  if (p) { S.lastSizes.png = p.size; showResult(head()); updateReadouts(); }
+  else showResult(head() + '<br>同参数 PNG 对照编码失败');
+}
+function showResult(html, bad) {
+  els.result.hidden = false;
+  els.result.className = 'notice' + (bad ? ' bad' : '');
+  els.result.innerHTML = html;
+}
+function toBlob(cv, mime, q) { return new Promise((res) => cv.toBlob(res, mime, q)); }
+function saveBlob(blob, filename) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+}
+
+/* ============================================================
+   载入图片
+   ============================================================ */
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+async function loadFile(file) {
+  if (!file || !/^image\//.test(file.type)) { showResult('这个文件不是图片。', true); return; }
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await fetchImage(url);
+    let frame = img;
+    try { frame = await createImageBitmap(img, { imageOrientation: 'from-image' }); } catch { /* 不支持就退回未纠正方向的 Image */ }
+    const cv = document.createElement('canvas');
+    cv.width = frame.width || img.naturalWidth;
+    cv.height = frame.height || img.naturalHeight;
+    if (!cv.width || !cv.height) { showResult('解不出图片尺寸。', true); return; }
+    cv.getContext('2d').drawImage(frame, 0, 0);
+    if (frame.close) frame.close();
+    S.src = cv; S.W = cv.width; S.H = cv.height; S.name = file.name; S.sel = null;
+    S.srcBytes = file.size; S.lastSizes = null;
+    S.radius = Math.round(Math.min(S.W, S.H) * 0.125);      // 起手给短边的 1/8
+    els.stage.classList.remove('hidden');
+    els.drop.hidden = true; els.pick.hidden = false;
+    els.result.hidden = true;
+    els.meta.innerHTML = `<span><b>${esc(file.name)}</b></span><span>${S.W}×${S.H}</span>`
+      + `<span>${(file.size / 1024).toFixed(1)} KB</span><span>${esc(file.type)}</span>`;
+    syncRangeLimits();
+    render();
+  } catch (err) {
+    showResult('读取失败：' + esc(err?.message || err), true);
+  } finally { URL.revokeObjectURL(url); }
+}
+function fetchImage(url) {
+  return new Promise((res, rej) => {
+    const im = new Image();
+    im.onload = () => res(im); im.onerror = rej; im.src = url;
+  });
+}
+
+const R_PRESETS = [4, 8, 12, 25, 50];      // 短边百分比；50% 即该框的最大可用半径
+/* 圆角开关关掉时锁住半径/预设/形状档：配置项不该在无效状态下可点 */
+function syncEnabled() {
+  const on = S.enabled && !!S.src;
+  els.radius.disabled = !on;
+  els.rPresets.querySelectorAll('.chip').forEach((b) => { b.disabled = !on; });
+  els.shapes.querySelectorAll('.chip').forEach((b) => { b.disabled = !S.enabled; });
+}
+function syncRangeLimits() {
+  const b = activeBox();
+  const short = Math.min(b.w, b.h);
+  const max = S.src ? Math.max(0, Math.floor(short / 2)) : 0;
+  els.radius.max = String(max);
+  if (S.radius > max) S.radius = max;
+  els.radius.value = String(S.radius);
+  els.rLabel.textContent = S.src ? `半径 0–${max}px` : '半径';
+  els.rPresets.innerHTML = !S.src ? '' : R_PRESETS
+    .map((q) => `<button class="chip" data-pct="${q}">${q}% 短边<span class="p">=${Math.round(short * q / 100)}px</span></button>`).join('');
+  syncEnabled();
+}
+
+/* ============================================================
+   事件绑定
+   ============================================================ */
+els.drop.addEventListener('click', () => els.file.click());
+els.file.addEventListener('change', (e) => loadFile(e.target.files[0]));
+['dragenter', 'dragover'].forEach((t) => els.stageBox.addEventListener(t, (e) => {
+  e.preventDefault(); els.drop.classList.add('over'); if (S.src) els.drop.hidden = false;
+}));
+['dragleave', 'drop'].forEach((t) => els.stageBox.addEventListener(t, (e) => {
+  e.preventDefault(); els.drop.classList.remove('over'); if (S.src) els.drop.hidden = true;
+}));
+els.stageBox.addEventListener('drop', (e) => { e.dataTransfer?.files?.[0] && loadFile(e.dataTransfer.files[0]); });
+document.addEventListener('paste', (e) => {
+  const f = [...(e.clipboardData?.files || [])][0];
+  if (f) loadFile(f);
+});
+
+els.enabled.addEventListener('change', () => { S.enabled = els.enabled.checked; syncEnabled(); render(); });
+els.radius.addEventListener('input', () => { S.radius = +els.radius.value; render(); });
+els.rPresets.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-pct]'); if (!btn || !S.src) return;
+  const b = activeBox(), short = Math.min(b.w, b.h);
+  S.radius = Math.min(Math.round(short * +btn.dataset.pct / 100), Math.floor(short / 2));
+  els.radius.value = String(S.radius);
+  render();
+});
+els.shapes.innerHTML = Object.entries(SHAPES)
+  .map(([k, s]) => `<button class="chip" data-shape="${k}" aria-pressed="${k === S.shapeKey}">${s.label}<span class="p">p=${s.p.toFixed(2)}${s.kind === 'cubic' ? ' · 解析' : ' · v=' + (s.v ?? '—')}</span></button>`).join('');
+syncEnabled();
+els.shapes.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-shape]'); if (!btn) return;
+  S.shapeKey = btn.dataset.shape;
+  [...els.shapes.children].forEach((b) => b.setAttribute('aria-pressed', b === btn));
+  document.documentElement.style.setProperty('--g2-shape', SHAPES[S.shapeKey].v != null ? `superellipse(${SHAPES[S.shapeKey].v})` : 'squircle');
+  render();
+});
+document.documentElement.style.setProperty('--g2-shape', 'superellipse(2)');
+
+function setMode(m) {
+  S.mode = m;
+  els.modeFull.setAttribute('aria-pressed', m === 'full');
+  els.modeRegion.setAttribute('aria-pressed', m === 'region');
+  syncRangeLimits(); render();
+}
+els.modeFull.addEventListener('click', () => setMode('full'));
+els.modeRegion.addEventListener('click', () => setMode('region'));
+els.selClear.addEventListener('click', () => { S.sel = null; render(); });
+
+els.compress.addEventListener('change', () => {
+  S.compress = els.compress.checked;
+  els.compBox.hidden = !S.compress;
+  updateReadouts();
+});
+els.fmtSeg.innerHTML = FORMATS
+  .map((f) => `<button data-fmt="${f.key}" aria-pressed="${f.key === S.format}" ${encodable[f.mime] ? '' : 'disabled title="本机浏览器不能编码这个格式"'}>${f.label}</button>`).join('');
+els.fmtSeg.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-fmt]'); if (!btn || btn.disabled) return;
+  S.format = btn.dataset.fmt;
+  [...els.fmtSeg.children].forEach((b) => b.setAttribute('aria-pressed', b === btn));
+  els.bgRow.hidden = fmtOf(S.format).alpha;
+  els.bgNote.textContent = fmtOf(S.format).alpha ? '' : '此格式不存 alpha，圆角外将被填成这个颜色';
+  updateReadouts();
+});
+els.quality.addEventListener('input', () => { S.quality = +els.quality.value; els.qVal.textContent = S.quality; updateReadouts(); });
+els.bg.addEventListener('input', () => { S.bg = els.bg.value; updateReadouts(); });
+els.export.addEventListener('click', exportImage);
+els.pick.addEventListener('click', () => els.file.click());
+els.qVal.textContent = S.quality;
+
+/* ---------- 区域选择器：位移 / 缩放 / 新画 ---------- */
+let drag = null;
+function toImg(e) {
+  const r = els.stage.getBoundingClientRect();
+  return {
+    x: Math.max(0, Math.min(S.W, (e.clientX - r.left) * S.W / r.width)),
+    y: Math.max(0, Math.min(S.H, (e.clientY - r.top) * S.H / r.height)),
+  };
+}
+function hitTest(p) {
+  if (!S.sel) return null;
+  const tol = (HS / 2 + 4) / stageK;
+  for (const h of handleRects(S.sel))
+    if (p.x >= h.x - tol && p.x <= h.x + h.s + tol && p.y >= h.y - tol && p.y <= h.y + h.s + tol) return h.id;
+  const s = S.sel;
+  if (p.x >= s.x && p.x <= s.x + s.w && p.y >= s.y && p.y <= s.y + s.h) return 'move';
+  return null;
+}
+els.stage.addEventListener('pointerdown', (e) => {
+  if (!S.src || S.mode !== 'region') return;
+  e.preventDefault();
+  els.stage.setPointerCapture(e.pointerId);
+  const p = toImg(e), hit = hitTest(p), s = S.sel;
+  if (hit === 'move') drag = { type: 'move', ox: p.x - s.x, oy: p.y - s.y };
+  else if (hit) { const [ax, ay] = { nw: [s.x + s.w, s.y + s.h], ne: [s.x, s.y + s.h], sw: [s.x + s.w, s.y], se: [s.x, s.y] }[hit];
+    drag = { type: 'resize', anchor: { x: ax, y: ay } }; }
+  else { drag = { type: 'new', origin: p }; S.sel = { x: p.x, y: p.y, w: 0, h: 0 }; }
+});
+els.stage.addEventListener('pointermove', (e) => {
+  if (!S.src) return;
+  if (S.mode !== 'region') { els.stage.style.cursor = 'default'; return; }
+  const p = toImg(e);
+  if (!drag) { const h = hitTest(p); els.stage.style.cursor = h === 'move' ? 'move' : h ? (h === 'nw' || h === 'se' ? 'nwse-resize' : 'nesw-resize') : 'crosshair'; return; }
+  const s = S.sel;
+  if (drag.type === 'move') {
+    s.x = Math.max(0, Math.min(S.W - s.w, p.x - drag.ox));
+    s.y = Math.max(0, Math.min(S.H - s.h, p.y - drag.oy));
+  } else if (drag.type === 'resize') {
+    const a = drag.anchor;
+    s.x = Math.min(a.x, p.x); s.y = Math.min(a.y, p.y);
+    s.w = Math.abs(p.x - a.x); s.h = Math.abs(p.y - a.y);
+  } else {
+    const o = drag.origin;
+    s.x = Math.min(o.x, p.x); s.y = Math.min(o.y, p.y);
+    s.w = Math.abs(p.x - o.x); s.h = Math.abs(p.y - o.y);
+  }
+  clampSel();
+  render();
+});
+function clampSel() {
+  const s = S.sel; if (!s) return;
+  s.w = Math.min(s.w, S.W - s.x); s.h = Math.min(s.h, S.H - s.y);
+}
+function endDrag() {
+  if (drag?.type === 'new' && S.sel && (S.sel.w < 16 || S.sel.h < 16)) S.sel = null;
+  drag = null; syncRangeLimits(); render();
+}
+els.stage.addEventListener('pointerup', endDrag);
+els.stage.addEventListener('pointercancel', endDrag);
+els.stage.addEventListener('contextmenu', (e) => { if (S.mode === 'region') { e.preventDefault(); S.sel = null; render(); } });
+
+window.addEventListener('resize', () => render());
+updateReadouts();
+</script>
+</body>
+</html>
