@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>表情厨房 Emoji Kitchen</title>
+<meta name="description" content="单文件复刻版表情厨房：挑两个 Emoji，看 Google 表情厨房把它们画成的组合图。" />
+<style>
+  :root {
+    --bg: #ffffff; --panel: #ffffff; --line: #e6e6e6;
+    --text: rgba(0, 0, 0, .87); --muted: rgba(0, 0, 0, .55);
+    --hover: rgba(0, 0, 0, .06); --accent: #8bc34a; --accent-strong: #689f38;
+    --ink-on-accent: rgba(0, 0, 0, .87); --card: #ffffff;
+    --shadow: 0 3px 5px -1px rgba(0,0,0,.2), 0 5px 8px rgba(0,0,0,.14), 0 1px 14px rgba(0,0,0,.12);
+  }
+  [data-theme="dark"] {
+    --bg: #121212; --panel: #181818; --line: #2c2c2c;
+    --text: #ebebeb; --muted: #9c9c9c;
+    --hover: rgba(255,255,255,.09); --accent: #8bc34a; --accent-strong: #9ccc65;
+    --ink-on-accent: #101010; --card: #1f1f1f;
+    --shadow: 0 3px 5px -1px rgba(0,0,0,.5), 0 5px 8px rgba(0,0,0,.4), 0 1px 14px rgba(0,0,0,.3);
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; overflow: hidden; background: var(--bg); color: var(--text);
+    font-family: Roboto, "Noto Sans SC", "Microsoft YaHei", system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .app {
+    display: grid; height: 100dvh;
+    grid-template-columns: clamp(248px, 22vw, 360px) minmax(0, 1fr) clamp(248px, 22vw, 360px);
+  }
+  /* ---------- 选择器 ---------- */
+  .picker { display: flex; flex-direction: column; min-height: 0; background: var(--panel); }
+  .picker.left { border-right: 1px solid var(--line); }
+  .picker.right { border-left: 1px solid var(--line); transition: opacity .18s ease; }
+  .picker.right[data-lock="1"] { opacity: .38; pointer-events: none; user-select: none; }
+  .phead { padding: 12px 12px 6px; }
+  .search {
+    display: flex; align-items: center; gap: 2px; padding: 4px 6px 4px 10px;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--bg);
+  }
+  .search:focus-within { border-color: var(--accent-strong); box-shadow: 0 0 0 1px var(--accent-strong); }
+  .search svg { flex: none; fill: var(--muted); }
+  .search input {
+    flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text);
+    font: inherit; font-size: 15px; padding: 8px 4px;
+  }
+  .search input::placeholder { color: var(--muted); }
+  .ibtn {
+    flex: none; width: 36px; height: 36px; border: 0; border-radius: 50%; background: transparent;
+    color: var(--muted); cursor: pointer; display: grid; place-items: center; font-size: 17px;
+  }
+  .ibtn:hover { background: var(--hover); color: var(--text); }
+  .ibtn.accent { color: var(--accent-strong); }
+  .ibtn[hidden] { display: none; }
+  .meta { display: flex; justify-content: space-between; gap: 8px; padding: 4px 6px 0; min-height: 18px; font-size: 12px; color: var(--muted); }
+  .grid {
+    flex: 1; min-height: 0; overflow: auto; padding: 2px 8px 32px;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(48px, 1fr)); align-content: start;
+    scrollbar-width: thin;
+  }
+  .tile {
+    border: 0; background: transparent; padding: 4px; min-height: 48px; border-radius: 10px;
+    cursor: pointer; display: grid; place-items: center; color: inherit;
+  }
+  .tile:hover { background: var(--hover); }
+  .tile img, .tile .ch { width: 40px; height: 40px; display: block; object-fit: contain; font-size: 32px; line-height: 40px; text-align: center; }
+  .tile[aria-pressed="true"] { background: var(--hover); box-shadow: inset 0 0 0 2px var(--accent-strong); }
+  .tile:disabled { opacity: .2; cursor: default; }
+  .tile:disabled:hover { background: transparent; }
+  .empty { grid-column: 1 / -1; padding: 28px 12px; text-align: center; color: var(--muted); font-size: 13px; }
+  /* ---------- 中间舞台 ---------- */
+  .stage { display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; }
+  .stagebar {
+    display: flex; align-items: center; gap: 6px; padding: 10px 14px; min-height: 52px;
+    border-bottom: 1px solid var(--line); font-size: 13px; color: var(--muted);
+  }
+  .stagebar .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chip {
+    border: 1px solid var(--line); background: var(--bg); color: var(--text); border-radius: 999px;
+    padding: 5px 12px; font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap;
+  }
+  .chip:hover { background: var(--hover); }
+  .chip:disabled { opacity: .45; cursor: default; }
+  .stageScroll { flex: 1; min-height: 0; overflow: auto; scrollbar-width: thin; }
+  .hint { max-width: 460px; margin: 18vh auto 0; padding: 0 24px; text-align: center; color: var(--muted); line-height: 1.9; font-size: 15px; }
+  .hint b { color: var(--text); font-weight: 500; }
+  .cgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); align-content: start; }
+  .ctile { border: 0; background: transparent; padding: 8px; border-radius: 14px; cursor: pointer; display: grid; place-items: center; }
+  .ctile:hover { background: var(--hover); }
+  .ctile img { width: 96px; height: 96px; object-fit: contain; display: block; }
+  /* ---------- 单图详情 ---------- */
+  .detail { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 28px 20px 120px; }
+  .art {
+    width: min(320px, 68vw); aspect-ratio: 1; background: var(--card); border: 1px solid var(--line);
+    border-radius: 18px; box-shadow: var(--shadow); display: grid; place-items: center;
+  }
+  .art img { width: 88%; height: 88%; object-fit: contain; display: block; }
+  .eq { display: flex; align-items: center; gap: 12px; font-size: 15px; flex-wrap: wrap; justify-content: center; }
+  .eq img { width: 34px; height: 34px; object-fit: contain; }
+  .eq .op { color: var(--muted); font-size: 18px; }
+  .eq .res { width: 46px; height: 46px; }
+  .names { font-size: 13px; color: var(--muted); text-align: center; line-height: 1.8; }
+  .bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .ver { display: flex; align-items: center; gap: 4px; border: 1px solid var(--line); border-radius: 999px; padding: 2px; }
+  .ver span { font-size: 12px; color: var(--muted); min-width: 118px; text-align: center; }
+  /* ---------- 页脚 / 浮层 ---------- */
+  .foot { flex: none; display: flex; align-items: center; justify-content: center; gap: 18px; height: 54px; border-top: 1px solid var(--line); }
+  .foot a { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: var(--muted); }
+  .foot a:hover { background: var(--hover); color: var(--text); }
+  .foot svg { fill: currentColor; }
+  .fab {
+    position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 6;
+    width: 56px; height: 56px; border: 0; border-radius: 50%; background: var(--accent); color: var(--ink-on-accent);
+    box-shadow: var(--shadow); cursor: pointer; font-size: 23px; display: grid; place-items: center;
+  }
+  .fab:hover { background: var(--accent-strong); color: #fff; }
+  .fab:active { transform: translateX(-50%) scale(.94); }
+  .toast {
+    position: fixed; left: 50%; bottom: 92px; transform: translateX(-50%); z-index: 7;
+    background: var(--text); color: var(--bg); padding: 9px 18px; border-radius: 999px; font-size: 13px;
+    opacity: 0; transition: opacity .2s ease; pointer-events: none; max-width: 80vw; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .toast.on { opacity: .93; }
+  @media (max-width: 860px) {
+    body { overflow: auto; }
+    .app { grid-template-columns: 1fr; grid-template-rows: auto auto auto; height: auto; min-height: 100dvh; }
+    .picker { height: 42vh; border-left: 0 !important; border-right: 0 !important; border-bottom: 1px solid var(--line); }
+    .stage { min-height: 60vh; }
+    .fab { position: sticky; bottom: 16px; margin: 0 auto; left: auto; transform: none; }
+    .fab:active { transform: scale(.94); }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <section class="picker left" id="pkA" aria-label="第一个表情">
+    <div class="phead">
+      <div class="search">
+        <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M8.5 3a5.5 5.5 0 0 1 4.38 8.83l3.4 3.39-1.42 1.42-3.39-3.4A5.5 5.5 0 1 1 8.5 3Zm0 2a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/></svg>
+        <input id="qA" type="text" placeholder="搜索表情（中文 / 拼音 / 英文名）" autocomplete="off" spellcheck="false" />
+        <button class="ibtn" id="clrA" hidden title="清空搜索" aria-label="清空搜索">✕</button>
+        <button class="ibtn accent" id="rndA" title="随机选一个" aria-label="随机选一个">🎲</button>
+      </div>
+      <div class="meta"><span id="cntA"></span><span id="selA"></span></div>
+    </div>
+    <div class="grid" id="gridA" role="listbox" aria-label="表情列表"></div>
+  </section>
+
+  <section class="stage">
+    <div class="stagebar">
+      <span class="grow" id="crumb">挑一个表情开始</span>
+      <button class="chip" id="zipBtn" disabled title="把当前表情的全部组合图打包成 ZIP 下载">⬇ 打包下载</button>
+      <button class="chip" id="linkBtn" disabled title="复制这个组合的分享链接">复制链接</button>
+      <button class="chip" id="themeBtn" title="切换深色 / 浅色">🌙 深色</button>
+    </div>
+    <div class="stageScroll" id="stage"></div>
+    <footer class="foot">
+      <a href="https://xsalazar.com" target="_blank" rel="noopener" title="数据来源与原作者主页">
+        <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12.6a3.9 3.9 0 1 0 0-7.8 3.9 3.9 0 0 0 0 7.8Zm0 1.8c-3.3 0-6.9 1.7-6.9 4.2v1.4h13.8V18.6c0-2.5-3.6-4.2-6.9-4.2Z"/></svg>
+      </a>
+      <a href="https://github.com/xsalazar/emoji-kitchen" target="_blank" rel="noopener" title="原项目源码">
+        <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 17.5 4 12l5.5-5.5 1.4 1.4L6.8 12l4.1 4.1-1.4 1.4Zm5 0-1.4-1.4 4.1-4.1-4.1-4.1 1.4-1.4L20 12l-5.5 5.5Z"/></svg>
+      </a>
+      <a href="https://www.emojipedia.org/emoji-kitchen/" target="_blank" rel="noopener" title="了解表情厨房的来历">
+        <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3h5a2 2 0 0 1 2 2v5h-2V6.4l-8.3 8.3-1.4-1.4L16.6 5H14V3ZM5 5h5V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5h-2v5H5V5Z"/></svg>
+      </a>
+    </footer>
+  </section>
+
+  <section class="picker right" id="pkB" data-lock="1" aria-label="第二个表情">
+    <div class="phead">
+      <div class="search">
+        <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M8.5 3a5.5 5.5 0 0 1 4.38 8.83l3.4 3.39-1.42 1.42-3.39-3.4A5.5 5.5 0 1 1 8.5 3Zm0 2a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/></svg>
+        <input id="qB" type="text" placeholder="再挑一个表情" autocomplete="off" spellcheck="false" disabled />
+        <button class="ibtn" id="clrB" hidden title="清空搜索" aria-label="清空搜索">✕</button>
+        <button class="ibtn accent" id="rndB" title="随机选一个" aria-label="随机选一个">🎲</button>
+      </div>
+      <div class="meta"><span id="cntB"></span><span id="selB"></span></div>
+    </div>
+    <div class="grid" id="gridB" role="listbox" aria-label="搭配表情列表"></div>
+  </section>
+</div>
+
+<button class="fab" id="fab" title="随机搭配一对" aria-label="随机搭配一对">🎲</button>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>/*__EK_DATA__*/</script>
+<script>
+(function () {
+  'use strict';
+  var RAW = window.EK_RAW;
+  var BASE_BITS = RAW.bits.base, DATE_BITS = RAW.bits.date, REC_BITS = BASE_BITS + DATE_BITS + 1;
+  var MASK_B = (1 << BASE_BITS) - 1, MASK_D = (1 << DATE_BITS) - 1;
+
+  // ---------- 索引解码 ----------
+  function b64(s) {
+    var bin = atob(s), u = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+    return u;
+  }
+  var bytes = b64(RAW.records), counts = b64(RAW.counts);
+  var byBase = new Array(RAW.bases.length);   // byBase[i] = [j, d, o, j, d, o, ...] 按 j 升序、同 j 内日期降序
+  var pos = 0;
+  function take(n) {
+    var v = 0;
+    for (var k = 0; k < n; k++) { v = (v << 1) | ((bytes[pos >> 3] >> (7 - (pos & 7))) & 1); pos++; }
+    return v;
+  }
+  for (var i = 0; i < byBase.length; i++) {
+    var c = (counts[i * 2] << 8) | counts[i * 2 + 1], flat = new Int32Array(c * 3);
+    for (var k = 0; k < c; k++) { flat[k * 3] = take(BASE_BITS); flat[k * 3 + 1] = take(DATE_BITS); flat[k * 3 + 2] = take(1); }
+    byBase[i] = flat;
+  }
+
+  // ---------- 基 Emoji ----------
+  function notoUrl(cp) {
+    return 'https://raw.githubusercontent.com/googlefonts/noto-emoji/main/2D/svg/emoji_u' +
+      cp.split('-').filter(function (t) { return t !== 'fe0f'; })
+        .map(function (t) { return t.length >= 4 ? t : ('0000' + t).slice(-4); }).join('_') + '.svg';
+  }
+  // gstatic 路径里每个码点分段都各带一个 u 前缀：263a-fe0f -> u263a-ufe0f
+  function tok(cp) { return cp.split('-').map(function (t) { return 'u' + t; }).join('-'); }
+  function comboUrl(date, leftCp, rightCp) {
+    var L = tok(leftCp), R = tok(rightCp);
+    return 'https://www.gstatic.com/android/keyboard/emojikitchen/' + date + '/' + L + '/' + L + '_' + R + '.png';
+  }
+  var CJK = /[\u3400-\u9fff]/;   // 用转义写死，避免字面汉字被编码改动后静默失配
+  var bases = RAW.bases.map(function (r, idx) {
+    var words = (r[5] || '').split(' ').filter(Boolean);
+    return {
+      i: idx, cp: r[0], name: r[1], ch: r[2], cat: r[3],
+      cn: words.filter(function (w) { return CJK.test(w); }),
+      img: notoUrl(r[0]),
+      hay: (r[1] + ' ' + r[4] + ' ' + (r[5] || '') + ' ' + r[0]).toLowerCase()
+    };
+  });
+  // 词表里的中文项是 CLDR 关键词（☕ 的首词是「茶」、各类脸的首词都是「脸」），
+  // 不能当作准名称用，所以身份仍取 Unicode 英文名，中文只作别名展示与检索。
+  function label(x) { return x.name; }
+  function alias(x) { return x.cn.slice(0, 3).join('/'); }
+  function pairVersions(a, b) {           // -> [[date, leftIdx, rightIdx], ...] 日期降序
+    var lo = Math.min(a, b), hi = Math.max(a, b), f = byBase[lo], out = [];
+    for (var p = 0; p < f.length; p += 3) {
+      if (f[p] === hi) out.push([RAW.dates[f[p + 1]], f[p + 2] ? hi : lo, f[p + 2] ? lo : hi]);
+    }
+    return out;
+  }
+  function partnersOf(a) { return adj[a]; }
+  function hasPair(a, b) {
+    var lo = Math.min(a, b), hi = Math.max(a, b), f = byBase[lo];
+    for (var p = 0; p < f.length; p += 3) if (f[p] === hi) return true;
+    return false;
+  }
+  // 配对只存了一份（挂在序号较小的基 Emoji 下），这里反向补出每个表情的全部伙伴，按序号升序＝gBoard 顺序
+  var adj = bases.map(function () { return []; });
+  for (var lo = 0; lo < byBase.length; lo++) {
+    var f = byBase[lo];
+    for (var p = 0; p < f.length; p += 3) {
+      var hi = f[p];
+      adj[lo].push(hi);
+      if (hi !== lo) adj[hi].push(lo);
+      while (p + 3 < f.length && f[p + 3] === hi) p += 3;   // 跳过同一配对的历史版本
+    }
+  }
+  adj.forEach(function (l) { l.sort(function (x, y) { return x - y; }); });
+
+  // ---------- 状态 ----------
+  var S = { a: null, b: null, ver: 0, qa: '', qb: '' };
+  var $ = function (id) { return document.getElementById(id); };
+  var el = {
+    gridA: $('gridA'), gridB: $('gridB'), qA: $('qA'), qB: $('qB'), clrA: $('clrA'), clrB: $('clrB'),
+    cntA: $('cntA'), cntB: $('cntB'), selA: $('selA'), selB: $('selB'), pkB: $('pkB'), stage: $('stage'),
+    crumb: $('crumb'), zip: $('zipBtn'), link: $('linkBtn'), theme: $('themeBtn'), fab: $('fab'), toast: $('toast')
+  };
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (m) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]; }); }
+  function searchBases(q, restrict) {
+    var tokens = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    var pool = bases.filter(function (x) { return !restrict || restrict.has(x.i); });
+    if (!tokens.length) return pool;
+    return pool.filter(function (x) {
+      return tokens.every(function (t) { return x.hay.indexOf(t) >= 0; });
+    }).sort(function (m, n) { return score(n, tokens) - score(m, tokens); });
+    function score(x, ts) {
+      var t = ts[0], s = 0, nm = x.name.toLowerCase(), cn = (x.cn[0] || '');
+      if (x.ch === t) s += 400;
+      if (cn && t === cn) s += 220; else if (cn && t.length >= 2 && cn.indexOf(t) === 0) s += 130;
+      if (nm === t) s += 200; else if (nm.indexOf(t) === 0) s += 120; else if (nm.indexOf(t) >= 0) s += 80;
+      if (x.cp.indexOf(t) === 0) s += 60;
+      return s;
+    }
+  }
+
+  // ---------- 渲染：选择器 ----------
+  function tileHtml(x, selected, disabled) {
+    return '<button class="tile" role="option" data-i="' + x.i + '" data-ch="' + esc(x.ch) + '"' +
+      (selected ? ' aria-pressed="true"' : '') + (disabled ? ' disabled' : '') +
+      ' title="' + esc(x.name + (alias(x) ? ' · ' + alias(x) : '') + ' · ' + x.cp) + '" aria-label="' + esc(x.name) + '">' +
+      '<img loading="lazy" decoding="async" src="' + x.img + '" alt="' + esc(label(x)) + '" />' +
+      '</button>';
+  }
+  // Noto SVG 取不到时退回系统字体里的表情字符（error 不冒泡，用捕获阶段代理）
+  function wireImgFallback(root, mode) {
+    root.addEventListener('error', function (e) {
+      var img = e.target;
+      if (!img || img.tagName !== 'IMG') return;
+      if (mode === 'hide') { var t = img.closest('.ctile'); if (t) t.hidden = true; return; }
+      var host = img.closest('.tile');
+      var sp = document.createElement('span');
+      sp.className = 'ch';
+      sp.textContent = (host && host.dataset.ch) || img.alt;
+      img.replaceWith(sp);
+    }, true);
+  }
+  var lastSig = { A: null, B: null };
+  function renderPicker(which) {
+    var isA = which === 'A';
+    var grid = isA ? el.gridA : el.gridB;
+    var restrict = null;
+    if (!isA && S.a !== null) restrict = new Set(partnersOf(S.a));
+    var list = searchBases(isA ? S.qa : S.qb, restrict);
+    var sel = isA ? S.a : S.b;
+    // 列表内容只由「搜索词 + 左选」决定；两者没变就只打选中补丁。
+    // 整表重建会把滚动容器夹回 scrollTop=0，并让全部懒加载图重新挂一遍。
+    var sig = (isA ? S.qa : S.qb) + '|' + (isA ? '' : S.a);
+    if (sig !== lastSig[which]) {
+      lastSig[which] = sig;
+      var top = grid.scrollTop;
+      grid.innerHTML = list.length
+        ? list.map(function (x) { return tileHtml(x, x.i === sel, false); }).join('')
+        : '<div class="empty">' + (isA ? '没有匹配的表情' : (S.a === null ? '先在左边挑一个表情' : '这些表情与所选搭配没有组合')) + '</div>';
+      grid.scrollTop = top;
+    } else {
+      var prev = grid.querySelector('.tile[aria-pressed="true"]');
+      if (prev) prev.removeAttribute('aria-pressed');
+      if (sel !== null) {
+        var cur2 = grid.querySelector('.tile[data-i="' + sel + '"]');
+        if (cur2) cur2.setAttribute('aria-pressed', 'true');
+      }
+    }
+    var total = restrict ? restrict.size : bases.length;
+    (isA ? el.cntA : el.cntB).textContent = list.length + ' / ' + total + ' 个表情';
+    var cur = isA ? el.selA : el.selB;
+    cur.textContent = sel === null ? '' : bases[sel].ch + ' ' + label(bases[sel]);
+  }
+  function reveal(which, i) {
+    if (i === null) return;
+    var t = (which === 'A' ? el.gridA : el.gridB).querySelector('.tile[data-i="' + i + '"]');
+    if (t) t.scrollIntoView({ block: 'nearest' });
+  }
+
+  // ---------- 渲染：舞台 ----------
+  function renderStage() {
+    if (S.a === null) {
+      el.stage.innerHTML = '<div class="hint">从<b>左边</b>挑一个表情，这里会铺开它在 Google 表情厨房里所有的搭配；<br>再从<b>右边</b>指定一个，就只看那一张。<br>中间的 🎲 随机来一对。<br>搜索可输入中文、拼音或英文名，例如 <b>咖啡</b> / <b>kafei</b> / <b>coffee</b>。</div>';
+      el.crumb.textContent = '挑一个表情开始';
+      el.zip.disabled = true; el.link.disabled = true;
+      return;
+    }
+    var A = bases[S.a];
+    if (S.b === null) {
+      var ps = partnersOf(S.a);
+      el.crumb.textContent = A.ch + ' ' + label(A) + ' 的全部搭配 · ' + ps.length + ' 组';
+      el.zip.disabled = false; el.link.disabled = true;
+      el.stage.innerHTML = '<div class="cgrid">' + ps.map(function (j) {
+        var v = pairVersions(S.a, j)[0];
+        var url = comboUrl(v[0], bases[v[1]].cp, bases[v[2]].cp);
+        return '<button class="ctile" data-j="' + j + '" title="' + esc(label(A) + ' ＋ ' + label(bases[j])) + '">' +
+          '<img loading="lazy" decoding="async" src="' + url + '" alt="' + esc(A.name + '-' + bases[j].name) + '" /></button>';
+      }).join('') + '</div>';
+      return;
+    }
+    var B = bases[S.b], vs = pairVersions(S.a, S.b);
+    if (!vs.length) { S.b = null; renderAll(); return; }
+    if (S.ver >= vs.length) S.ver = 0;
+    var v = vs[S.ver];
+    var url = comboUrl(v[0], bases[v[1]].cp, bases[v[2]].cp);
+    el.crumb.textContent = A.ch + ' ' + label(A) + ' ＋ ' + B.ch + ' ' + label(B);
+    el.zip.disabled = false; el.link.disabled = false;
+    el.stage.innerHTML =
+      '<div class="detail">' +
+        '<div class="art"><img src="' + url + '" alt="' + esc(A.name + '-' + B.name) + '" /></div>' +
+        '<div class="eq">' +
+          '<img src="' + A.img + '" alt="" /><span class="op">＋</span>' +
+          '<img src="' + B.img + '" alt="" /><span class="op">＝</span>' +
+          '<img class="res" src="' + url + '" alt="" />' +
+        '</div>' +
+        '<div class="names">' + esc(label(A)) + ' × ' + esc(label(B)) +
+          '<br>别名 ' + esc((A.cn.slice(0, 5).join('、') || A.name) + ' ／ ' + (B.cn.slice(0, 5).join('、') || B.name)) +
+          '　·　分类 ' + esc(A.cat || '—') + ' / ' + esc(B.cat || '—') +
+          '<br>表情厨房上线批次 ' + v[0] + '</div>' +
+        '<div class="bar">' +
+          '<button class="chip" id="dlBtn">⬇ 下载 PNG</button>' +
+          '<button class="chip" id="cpBtn">📋 复制图片</button>' +
+          (vs.length > 1
+            ? '<div class="ver"><button class="ibtn" id="vPrev" title="上一版本">‹</button>' +
+              '<span>版本 ' + (S.ver + 1) + ' / ' + vs.length + '</span>' +
+              '<button class="ibtn" id="vNext" title="下一版本">›</button></div>'
+            : '') +
+          '<button class="chip" id="backBtn">← 看全部搭配</button>' +
+        '</div>' +
+      '</div>';
+  }
+  function renderAll() { renderPicker('A'); renderPicker('B'); renderStage(); syncLock(); syncHash(); }
+  function syncLock() {
+    var locked = S.a === null;
+    el.pkB.dataset.lock = locked ? '1' : '0';
+    el.qB.disabled = locked;
+  }
+
+  // ---------- 深链 ----------
+  function cpToIdx(cp) { for (var i = 0; i < bases.length; i++) if (bases[i].cp === cp) return i; return -1; }
+  function syncHash() {
+    var h = S.a === null ? '' : (S.b === null ? bases[S.a].cp : bases[S.a].cp + '/' + bases[S.b].cp);
+    var want = h ? '#' + h : location.pathname;
+    if (location.hash !== (h ? '#' + h : '')) history.replaceState(null, '', want);
+  }
+  function readHash() {
+    var h = decodeURIComponent(location.hash.replace(/^#/, ''));
+    if (!h) return;
+    var p = h.split('/');
+    var a = cpToIdx(p[0]);
+    if (a < 0) return;
+    S.a = a; S.b = null;
+    if (p[1]) { var b = cpToIdx(p[1]); if (b >= 0 && hasPair(a, b)) S.b = b; }
+  }
+
+  // ---------- 交互 ----------
+  function pickA(i) { S.a = i; if (S.b !== null && !hasPair(i, S.b)) S.b = null; S.ver = 0; renderAll(); reveal('A', i); }
+  function pickB(i) { if (S.a === null || !hasPair(S.a, i)) return; S.b = i; S.ver = 0; renderAll(); reveal('B', i); }
+  function onGridClick(grid, handler) {
+    grid.addEventListener('click', function (e) {
+      var t = e.target.closest('.tile');
+      if (t && !t.disabled) handler(Number(t.dataset.i));
+    });
+  }
+  onGridClick(el.gridA, pickA);
+  onGridClick(el.gridB, pickB);
+  wireImgFallback(el.gridA, 'char');
+  wireImgFallback(el.gridB, 'char');
+  wireImgFallback(el.stage, 'hide');
+  el.stage.addEventListener('click', function (e) {
+    var t = e.target.closest('.ctile');
+    if (t) { pickB(Number(t.dataset.j)); return; }
+    var id = e.target.id;
+    if (id === 'backBtn') { S.b = null; renderAll(); }
+    else if (id === 'vPrev') { S.ver = (S.ver + pairVersions(S.a, S.b).length - 1) % pairVersions(S.a, S.b).length; renderStage(); }
+    else if (id === 'vNext') { S.ver = (S.ver + 1) % pairVersions(S.a, S.b).length; renderStage(); }
+    else if (id === 'dlBtn') downloadCurrent();
+    else if (id === 'cpBtn') copyCurrent();
+  });
+  function onSearch(input, clr, key) {
+    input.addEventListener('input', function () {
+      S[key] = input.value; clr.hidden = !S[key]; renderPicker(key === 'qa' ? 'A' : 'B');
+    });
+    clr.addEventListener('click', function () {
+      input.value = ''; S[key] = ''; clr.hidden = true; input.focus(); renderPicker(key === 'qa' ? 'A' : 'B');
+    });
+  }
+  onSearch(el.qA, el.clrA, 'qa');
+  onSearch(el.qB, el.clrB, 'qb');
+  function randomFrom(list) { return list[Math.floor(Math.random() * list.length)]; }
+  $('rndA').addEventListener('click', function () {
+    var l = searchBases(S.qa, null); if (l.length) pickA(randomFrom(l).i);
+  });
+  $('rndB').addEventListener('click', function () {
+    if (S.a === null) return;
+    var allowed = new Set(partnersOf(S.a));
+    var l = searchBases(S.qb, allowed); if (l.length) pickB(randomFrom(l).i);
+  });
+  el.fab.addEventListener('click', function () {
+    if (S.a === null || S.b !== null) { pickA(Math.floor(Math.random() * bases.length)); }
+    var ps = partnersOf(S.a);
+    if (ps.length) pickB(randomFrom(ps));
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') { if (S.b !== null) { S.b = null; renderAll(); } else if (S.a !== null) { S.a = null; renderAll(); } }
+    else if (e.key === '/' && document.activeElement !== el.qA && document.activeElement !== el.qB) { e.preventDefault(); el.qA.focus(); }
+  });
+  window.addEventListener('hashchange', function () { S.a = null; S.b = null; readHash(); renderAll(); });
+
+  // ---------- 下载 / 复制 / 打包 ----------
+  function currentUrl() {
+    if (S.a === null || S.b === null) return null;
+    var vs = pairVersions(S.a, S.b); if (!vs.length) return null;
+    var v = vs[Math.min(S.ver, vs.length - 1)];
+    return comboUrl(v[0], bases[v[1]].cp, bases[v[2]].cp);
+  }
+  function saveBlob(blob, name) {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 30000);
+  }
+  function fetchBlob(url) { return fetch(url).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); }); }
+  function downloadCurrent() {
+    var url = currentUrl(); if (!url) return;
+    fetchBlob(url).then(function (b) { saveBlob(b, bases[S.a].name + '-' + bases[S.b].name + '.png'); toast('已下载 PNG'); })
+      .catch(function (err) { window.open(url, '_blank'); toast('下载失败（' + err.message + '），已在新窗口打开'); });
+  }
+  function copyCurrent() {
+    var url = currentUrl(); if (!url) return;
+    if (!navigator.clipboard || !window.ClipboardItem) { toast('这个浏览器不支持复制图片'); return; }
+    fetchBlob(url).then(function (b) {
+      var type = b.type === 'image/png' ? 'image/png' : null;
+      if (!type) throw new Error('不是 PNG（' + (b.type || '未知类型') + '）');
+      return navigator.clipboard.write([new ClipboardItem({ 'image/png': b.slice(0, b.size, 'image/png') })]);
+    }).then(function () { toast('图片已复制到剪贴板'); })
+      .catch(function (err) { toast('复制失败：' + err.message); });
+  }
+  var CRC_T = (function () {
+    var t = new Uint32Array(256);
+    for (var n = 0; n < 256; n++) { var c = n; for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1); t[n] = c >>> 0; }
+    return t;
+  })();
+  function crc32(u8) {
+    var c = 0xFFFFFFFF;
+    for (var i = 0; i < u8.length; i++) c = CRC_T[(c ^ u8[i]) & 255] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+  function makeZip(entries) {                       // 仅 STORE：PNG 本身已压缩
+    var enc = new TextEncoder(), parts = [], central = [], offset = 0, DOS_DATE = ((2026 - 1980) << 9) | (1 << 5) | 1;
+    function u16(n) { return [n & 255, (n >> 8) & 255]; }
+    function u32(n) { return [n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255]; }
+    entries.forEach(function (e) {
+      var nb = enc.encode(e.name), d = e.data, crc = crc32(d);
+      var head = new Uint8Array([].concat(u32(0x04034b50), u16(20), u16(0), u16(0), u16(0), u16(DOS_DATE),
+        u32(crc), u32(d.length), u32(d.length), u16(nb.length), u16(0)));
+      parts.push(head, nb, d);
+      central.push({ nb: nb, crc: crc, len: d.length, off: offset });
+      offset += head.length + nb.length + d.length;
+    });
+    var cdSize = 0;
+    central.forEach(function (c) {
+      var rec = new Uint8Array([].concat(u32(0x02014b50), u16(20), u16(20), u16(0), u16(0), u16(0), u16(DOS_DATE),
+        u32(c.crc), u32(c.len), u32(c.len), u16(c.nb.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(c.off)));
+      parts.push(rec, c.nb); cdSize += rec.length + c.nb.length;
+    });
+    parts.push(new Uint8Array([].concat(u32(0x06054b50), u16(0), u16(0), u16(central.length), u16(central.length),
+      u32(cdSize), u32(offset), u16(0))));
+    var total = parts.reduce(function (s, p) { return s + p.length; }, 0), out = new Uint8Array(total), p = 0;
+    parts.forEach(function (q) { out.set(q, p); p += q.length; });
+    return out;
+  }
+  var zipping = false;
+  el.zip.addEventListener('click', function () {
+    if (S.a === null || zipping) return;
+    var A = bases[S.a], ps = partnersOf(S.a);
+    if (!ps.length) { toast('这个表情还没有搭配'); return; }
+    zipping = true; el.zip.disabled = true;
+    var done = 0, files = [], queue = ps.slice();
+    function worker() {
+      if (!queue.length) return Promise.resolve();
+      var j = queue.shift(), v = pairVersions(S.a, j)[0];
+      return fetchBlob(comboUrl(v[0], bases[v[1]].cp, bases[v[2]].cp)).then(function (b) {
+        return b.arrayBuffer().then(function (buf) {
+          files.push({ name: A.name + '-' + bases[j].name + '.png', data: new Uint8Array(buf) });
+          done++; toast('打包中 ' + done + ' / ' + ps.length);
+          return worker();
+        });
+      }, function () { done++; return worker(); });
+    }
+    Promise.all([worker(), worker(), worker(), worker(), worker(), worker()]).then(function () {
+      files.sort(function (x, y) { return x.name < y.name ? -1 : 1; });
+      saveBlob(new Blob([makeZip(files)], { type: 'application/zip' }), A.name + '-combos.zip');
+      toast('已打包 ' + files.length + ' 张（' + A.name + '）');
+      zipping = false; el.zip.disabled = false;
+    });
+  });
+  el.link.addEventListener('click', function () {
+    var url = location.href.split('#')[0] + '#' + bases[S.a].cp + '/' + bases[S.b].cp;
+    (navigator.clipboard && navigator.clipboard.writeText)
+      ? navigator.clipboard.writeText(url).then(function () { toast('链接已复制'); }, function () { toast('复制失败，请手动复制地址栏'); })
+      : toast('这个浏览器不支持复制链接');
+  });
+
+  // ---------- 主题 ----------
+  function applyTheme(t) {
+    document.documentElement.dataset.theme = t;
+    el.theme.textContent = t === 'dark' ? '☀ 浅色' : '🌙 深色';
+    try { localStorage.setItem('ek-theme', t); } catch (e) { /* file:// 下可能被禁 */ }
+  }
+  el.theme.addEventListener('click', function () {
+    applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+  });
+  var saved = null;
+  try { saved = localStorage.getItem('ek-theme'); } catch (e) { /* ignore */ }
+  applyTheme(saved || (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+
+  // ---------- 提示条 ----------
+  var toastTimer = null;
+  function toast(msg) {
+    el.toast.textContent = msg; el.toast.classList.add('on');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.toast.classList.remove('on'); }, 2600);
+  }
+
+  readHash();
+  renderAll();
+  // 供控制台与自动化验收使用的内部结构只读出口
+  window.__EK = { bases: bases, dates: RAW.dates, adj: adj, partnersOf: partnersOf, hasPair: hasPair,
+    pairVersions: pairVersions, comboUrl: comboUrl, makeZip: makeZip, crc32: crc32, state: function () { return { a: S.a, b: S.b, ver: S.ver }; } };
+})();
+</script>
+</body>
+</html>
