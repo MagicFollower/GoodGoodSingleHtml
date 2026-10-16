@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<!--
+  tools/probe/verify.html — 无头验证台（不属于交付体，只是取证用）
+  跑法：msedge --headless=new --window-size=1440,1040 --virtual-time-budget=60000 --dump-dom <此文件>
+  取证三件事：① 关键布局数值 ② 导出 PNG/SVG 的真实字节 ③ 运行时有没有发出网络请求
+-->
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>verify</title>
+    <script>
+      /* 网络钩子必须在业务脚本之前装好 */
+      window.__net = []
+      const record = (kind, url) => {
+        const u = String(url)
+        if (u.startsWith('data:') || u.startsWith('blob:') || u.startsWith('file:')) return
+        window.__net.push(kind + ' ' + u.slice(0, 120))
+      }
+      const XO = XMLHttpRequest.prototype.open
+      XMLHttpRequest.prototype.open = function (m, u) {
+        record('xhr', u)
+        return XO.apply(this, arguments)
+      }
+      const F = window.fetch
+      window.fetch = function (u) {
+        record('fetch', u)
+        return F ? F.apply(this, arguments) : Promise.reject(new Error('no fetch'))
+      }
+      const srcDesc = Object.getOwnPropertyDescriptor(Image.prototype, 'src')
+      Object.defineProperty(Image.prototype, 'src', {
+        set(v) {
+          record('img', v)
+          return srcDesc.set.call(this, v)
+        },
+        get: srcDesc.get,
+      })
+      const aDesc = Object.getOwnPropertyDescriptor(HTMLAnchorElement.prototype, 'href')
+      Object.defineProperty(HTMLAnchorElement.prototype, 'href', {
+        set(v) {
+          record('a', v)
+          return aDesc.set.call(this, v)
+        },
+        get: aDesc.get,
+      })
+    </script>
+    <link rel="stylesheet" href="../../vendor/codemirror.min.css" />
+    <link rel="stylesheet" href="../../css/app.css" />
+  </head>
+  <body>
+    <main class="page">
+      <section class="editor">
+        <div class="toolbar" id="toolbar">
+          <div data-slot="theme-dropdown"></div>
+          <div data-slot="language-dropdown"></div>
+          <div class="toolbar-second-row">
+            <div class="setting-buttons">
+              <div data-slot="background-select"></div>
+              <div data-slot="settings"></div>
+              <div data-slot="copy-menu"></div>
+            </div>
+            <div class="share-buttons"><div data-slot="export-menu"></div></div>
+          </div>
+        </div>
+        <div class="canvas-area" id="canvas-area">
+          <div class="drop-overlay" id="drop-overlay" hidden></div>
+          <div class="export-container" id="export-container">
+            <div class="container" id="canvas-container">
+              <div class="window-controls" id="window-controls" hidden></div>
+              <div class="CodeMirror__container" id="editor-host"></div>
+              <div class="watermark-host" id="watermark-host"></div>
+              <div class="container-bg">
+                <div class="white eliminateOnRender"></div>
+                <div class="alpha eliminateOnRender"></div>
+                <div class="bg" id="canvas-bg"></div>
+              </div>
+              <div class="handler" id="width-handler" hidden></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+    <div class="toast-host" id="toast-host"></div>
+
+    <script src="../../vendor/codemirror.min.js"></script>
+    <script src="../../vendor/addons.js"></script>
+    <script src="../../vendor/modes.js"></script>
+    <script src="../../vendor/custom-modes.js"></script>
+    <script src="../../vendor/hljs.min.js"></script>
+    <script src="../../vendor/hljs-languages.js"></script>
+    <script src="../../vendor/dom-to-image.js"></script>
+    <script src="../../data/settings.js"></script>
+    <script src="../../data/themes.js"></script>
+    <script src="../../data/languages.js"></script>
+    <script src="../../data/presets.js"></script>
+    <script src="../../data/svg.js"></script>
+    <script src="../../js/util.js"></script>
+    <script src="../../js/url.js"></script>
+    <script src="../../js/state.js"></script>
+    <script src="../../js/theme.js"></script>
+    <script src="../../js/invisibles.js"></script>
+    <script src="../../js/editor.js"></script>
+    <script src="../../js/render.js"></script>
+    <script src="../../js/export.js"></script>
+    <script src="../../js/ui/widgets.js"></script>
+    <script src="../../js/ui/panels.js"></script>
+    <script src="../../js/app.js"></script>
+
+    <script>
+      const R = { ok: false, steps: [], hung: [] }
+      /* 逐步落盘：dump-dom 抓的是"当下"的 DOM，任何一步挂住也要看到前面已完成的结果 */
+      let pre = null
+      const flush = () => {
+        if (!pre) {
+          pre = document.createElement('pre')
+          pre.id = 'verify-json'
+          document.body.appendChild(pre)
+        }
+        pre.textContent = 'VERIFY_JSON' + JSON.stringify(R, null, 1)
+      }
+      const step = async (name, ms, fn) => {
+        let timer
+        const guard = new Promise((_, rej) => {
+          timer = setTimeout(() => rej(new Error('HANG')), ms)
+        })
+        try {
+          const v = await Promise.race([Promise.resolve().then(fn), guard])
+          R[name] = v
+        } catch (e) {
+          R[name] = { error: String(e && e.message ? e.message : e) }
+          R.hung.push(name)
+        }
+        clearTimeout(timer)
+        flush()
+      }
+      const box = el => {
+        if (!el) return null
+        const r = el.getBoundingClientRect()
+        return [Math.round(r.width), Math.round(r.height), Math.round(r.left), Math.round(r.top)]
+      }
+      const hex = buf =>
+        Array.from(new Uint8Array(buf.slice(0, 12)))
+          .map(b => b.toString(16).padStart(2, '0'))
+          .join(' ')
+
+      async function run() {
+        await new Promise(r => setTimeout(r, 800))
+        flush()
+
+        /* ⓪ 先证 localStorage 在本机 file:// 下可用，否则后面的持久化判据无意义 */
+        await step('storageProbe', 4000, () => {
+          const out = {}
+          try {
+            localStorage.setItem('__probe', '1')
+            out.setItem = 'ok'
+            out.getItem = localStorage.getItem('__probe')
+            localStorage.removeItem('__probe')
+            out.origin = location.origin
+          } catch (e) {
+            out.error = String(e && e.name ? e.name + ': ' + e.message : e)
+          }
+          return out
+        })
+
+        /* ① 布局（同步） */
+        await step('layout', 4000, () => ({
+          toolbar: box(document.getElementById('toolbar')),
+          bgDisplay: box(document.querySelector('.bg-select-display')),
+          settingsBtn: box(document.querySelector('[data-slot="settings"] .btn-square-icon')),
+          exportBtn: box(document.querySelector('.export-pair .quick')),
+          canvasArea: box(document.getElementById('canvas-area')),
+          exportContainer: box(document.getElementById('export-container')),
+          container: box(document.getElementById('canvas-container')),
+          editor: box(document.querySelector('#editor-host .CodeMirror')),
+          windowControls: box(document.getElementById('window-controls')),
+          handler: box(document.getElementById('width-handler')),
+          popoutMounted: [...document.querySelectorAll('.popout')].length,
+          computed: {
+            containerPadding: getComputedStyle(document.getElementById('canvas-container')).padding,
+            editorPadTop: getComputedStyle(document.querySelector('#editor-host .CodeMirror')).paddingTop,
+            editorFont: getComputedStyle(document.querySelector('#editor-host .CodeMirror')).fontFamily.split(',')[0],
+            editorFontSize: getComputedStyle(document.querySelector('#editor-host .CodeMirror')).fontSize,
+            editorLineHeight: getComputedStyle(document.querySelector('#editor-host .CodeMirror')).lineHeight,
+            shadow: getComputedStyle(document.getElementById('editor-host')).boxShadow,
+            radius: getComputedStyle(document.querySelector('#editor-host .CodeMirror')).borderTopLeftRadius,
+            bg: getComputedStyle(document.getElementById('canvas-bg')).backgroundColor,
+            keywordColor: (() => {
+              const k = document.querySelector('#editor-host .cm-keyword')
+              return k ? getComputedStyle(k).color : null
+            })(),
+            tokenSample: [...document.querySelectorAll('#editor-host .CodeMirror-line')][0]
+              ? [...document.querySelectorAll('#editor-host .CodeMirror-line')[0].querySelectorAll('span[class]')]
+                  .slice(0, 6)
+                  .map(sp => sp.className.split(' ')[0] + '=' + getComputedStyle(sp).color)
+              : null,
+          },
+          detection: CARBON.editor.detection,
+          mode: CARBON.editor.cm.getOption('mode'),
+          stateSnapshot: (function () {
+            const st = CARBON.store.state
+            const host = document.getElementById('editor-host')
+            return {
+              theme: st.theme,
+              windowTheme: st.windowTheme,
+              windowControls: st.windowControls,
+              lineNumbers: st.lineNumbers,
+              watermark: st.watermark,
+              dropShadow: st.dropShadow,
+              paddingVertical: st.paddingVertical,
+              paddingHorizontal: st.paddingHorizontal,
+              backgroundColor: st.backgroundColor,
+              width: st.width,
+              watermarkHTML: document.getElementById('watermark-host').innerHTML.length,
+              hostShadow: getComputedStyle(host).boxShadow,
+              wmHostBox: box(document.getElementById('watermark-host')),
+              wmSvgBox: box(document.querySelector('#watermark-host svg')),
+              wmComputed: (function () {
+                const wm = document.getElementById('watermark-host')
+                const cs = getComputedStyle(wm)
+                const svg = document.querySelector('#watermark-host svg')
+                return {
+                  position: cs.position,
+                  bottom: cs.bottom,
+                  right: cs.right,
+                  opacity: cs.opacity,
+                  display: cs.display,
+                  visibility: cs.visibility,
+                  zIndex: cs.zIndex,
+                  svgW: svg ? svg.getAttribute('width') : null,
+                  svgFill: svg ? getComputedStyle(svg).fill : null,
+                  svgColor: svg ? getComputedStyle(svg).color : null,
+                }
+              })(),
+            }
+          })(),
+        }))
+
+        /* ② 导出（每一步单独限时，dom-to-image 走真实异步绘图） */
+        await step('png', 20000, async () => {
+          const b = await CARBON.exporter.getImage({ format: 'blob' })
+          return { bytes: b.size, type: b.type, head: hex(await b.arrayBuffer()) }
+        })
+        await step('png1x', 20000, async () => ({
+          bytes: (await CARBON.exporter.getImage({ format: 'blob', exportSize: 1 })).size,
+        }))
+        await step('svg', 20000, async () => {
+          const b = await CARBON.exporter.getImage({ format: 'svg' })
+          const t = await b.text()
+          return {
+            bytes: b.size,
+            type: b.type,
+            startsWith: t.slice(0, 60).replace(/\n/g, ' '),
+            hasForeignObject: t.indexOf('foreignObject') >= 0,
+            hasCodeMirror: t.indexOf('CodeMirror') >= 0,
+            hasCursors: t.indexOf('CodeMirror-cursors') >= 0,
+            hasEliminate: t.indexOf('eliminateOnRender') >= 0,
+            hasNbsp: t.indexOf('&nbsp;') >= 0,
+            hasBadPct: t.indexOf('%23') >= 0,
+            keywordCount: (t.match(/cm-keyword/g) || []).length,
+          }
+        })
+        await step('squared', 20000, async () => ({
+          bytes: (await CARBON.exporter.getImage({ format: 'blob', squared: true, exportSize: 1 })).size,
+        }))
+        await step('sizeCheck', 4000, () => {
+          const ec = document.getElementById('export-container')
+          return { offset: [ec.offsetWidth, ec.offsetHeight], expect2x: [ec.offsetWidth * 2, ec.offsetHeight * 2] }
+        })
+
+        /* ③ 网络（同步读钩子记录 + performance 资源条目）
+         * file:// 下 resourceEntries 恒为 0（Chromium 不给本地文件记条目），所以单看它是瞎的；
+         * 同一份探针跑在 http://127.0.0.1 上会记到 N 条同源条目 —— 那一跑才是"探针看得见网络"的对照。
+         * 因此判据用 foreignOrigin：既不是 file: 也不是页面自身 origin 的条目必须为 0。 */
+        await step('net', 4000, () => {
+          const res = performance.getEntriesByType('resource').map(e => e.name)
+          const origin = location.origin === 'null' ? 'file:' : location.origin
+          const foreign = res.filter(n => !n.startsWith('file:') && !n.startsWith(origin))
+          return {
+            scheme: location.protocol,
+            origin,
+            attempted: window.__net,
+            resourceEntries: res.length,
+            nonFile: res.filter(n => !n.startsWith('file:')).length,
+            foreignOrigin: foreign.length,
+            foreignList: foreign.slice(0, 5),
+            dataOrBlob: res.filter(n => n.startsWith('data:') || n.startsWith('blob:')).length,
+          }
+        })
+
+        /* ④ 状态变更冒烟：切主题 / 换语言 / 开关 */
+        await step('afterTheme', 4000, async () => {
+          CARBON.store.set({ theme: 'dracula' })
+          await new Promise(r => setTimeout(r, 150))
+          return {
+            theme: CARBON.store.state.theme,
+            bg: getComputedStyle(document.querySelector('#editor-host .CodeMirror')).backgroundColor,
+            keyword: getComputedStyle(document.querySelector('#editor-host .cm-keyword')).color,
+          }
+        })
+        await step('afterLang', 4000, async () => {
+          CARBON.store.set({ language: 'python', code: 'def f(x):\n    return x * 2\n' })
+          await new Promise(r => setTimeout(r, 700))
+          return {
+            mode: CARBON.editor.cm.getOption('mode'),
+            keyword: getComputedStyle(document.querySelector('#editor-host .cm-keyword')).color,
+            lines: document.querySelectorAll('#editor-host .CodeMirror-line').length,
+          }
+        })
+        await step('afterToggles', 4000, async () => {
+          CARBON.store.set({ lineNumbers: true, watermark: true, windowTheme: 'boxy', dropShadow: false })
+          await new Promise(r => setTimeout(r, 250))
+          const svg = document.querySelector('#window-controls svg')
+          return {
+            gutters: document.querySelectorAll('#editor-host .CodeMirror-gutter').length,
+            watermarkBytes: document.getElementById('watermark-host').innerHTML.length,
+            wcSvg: svg ? svg.getAttribute('width') : null,
+            shadow: getComputedStyle(document.getElementById('editor-host')).boxShadow,
+          }
+        })
+        await step('afterInvisibles', 4000, async () => {
+          CARBON.store.set({ hiddenCharacters: true, language: 'javascript', code: 'function add(a, b) {\n\treturn a + b;\n}\n' })
+          await new Promise(r => setTimeout(r, 400))
+          const kinds = {}
+          for (const n of document.querySelectorAll('.cm-invisible')) {
+            const k = n.className.split(' ').filter(c => c !== 'cm-invisible')[0]
+            kinds[k] = (kinds[k] || 0) + 1
+          }
+          return {
+            state: CARBON.store.state.hiddenCharacters,
+            marks: document.querySelectorAll('.cm-invisible').length,
+            kinds,
+            sample: [...document.querySelectorAll('.cm-invisible')].slice(0, 3).map(n => n.textContent),
+          }
+        })
+        await step('afterInvisiblesOff', 4000, async () => {
+          CARBON.store.set({ hiddenCharacters: false })
+          await new Promise(r => setTimeout(r, 300))
+          return { marks: document.querySelectorAll('.cm-invisible').length }
+        })
+        await step('pngAfter', 20000, async () => ({
+          bytes: (await CARBON.exporter.getImage({ format: 'blob' })).size,
+        }))
+        await step('shareUrl', 4000, () => CARBON.url.buildShareUrl(CARBON.store.state).slice(0, 200))
+        await step('persist', 8000, async () => {
+          await new Promise(r => setTimeout(r, 1500)) // 等 750ms 去抖落盘
+          const raw = localStorage.getItem('CARBON_STATE')
+          const o = raw ? JSON.parse(raw) : null
+          return {
+            bytes: raw ? raw.length : 0,
+            theme: o && o.theme,
+            language: o && o.language,
+            hiddenCharacters: o && o.hiddenCharacters,
+            hasCode: o && 'code' in o,
+            hasBackgroundImage: o && 'backgroundImage' in o,
+            keys: o ? Object.keys(o).length : 0,
+          }
+        })
+        R.ok = R.hung.length === 0
+      }
+
+      window.addEventListener('load', () => {
+        flush()
+        run()
+          .catch(e => {
+            R.error = e && e.message ? e.message : String(e)
+            R.stack = e && e.stack ? String(e.stack).split('\n').slice(0, 4).join(' | ') : null
+          })
+          .then(flush)
+      })
+    </script>
+  </body>
+</html>
