@@ -1,0 +1,20 @@
+{
+  "name": "bt3d-node",
+  "version": "1.0.0",
+  "description": "BT3D 格式 v1 的 Node 参考实现（比特流三维混淆容器）",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "bt3d": "src/cli.js"
+  },
+  "scripts": {
+    "test": "node test/criteria.js",
+    "prove-red": "node test/criteria.js --prove-red",
+    "vectors": "node test/vectors.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {},
+  "license": "UNLICENSED"
+}

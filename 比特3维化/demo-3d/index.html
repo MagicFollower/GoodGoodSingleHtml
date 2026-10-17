@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BT3D · 比特流三维混淆演示图</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="masthead">
+  <div class="mast-l">
+    <h1>BT3D <span class="ver">v1</span></h1>
+    <p class="sub">比特流三维混淆容器 · 参数与效果演示图</p>
+  </div>
+  <div class="mast-r" id="provenance"><!-- 由 app.js 用 data.meta 填充 --></div>
+</header>
+
+<nav class="toc">
+  <a href="#s1">1 项目基本介绍</a>
+  <a href="#s2">2 参数逐个介绍</a>
+  <a href="#s3">3 不同参数配置下的三维混淆效果</a>
+  <a href="#s4">4 口径与未验证项</a>
+</nav>
+
+<section id="s0" class="card intro-card">
+  <h2>读这张图之前，先记住三句话</h2>
+  <ol class="three">
+    <li><b>三维是视图，不是存储。</b>容器里没有任何三维数组；<code>z = 层号</code>、<code>(x,y) = 螺旋闭式(层内比特序号)</code>，两者都能从比特序号即时算出，一个字节都不多占。</li>
+    <li><b>前四步只搬位置，最后一步才改值。</b>螺旋、仿射、秩压缩都是双射的<b>位置</b>变换 —— 原文有多少个 1，容器里就有多少个 1。只有 ChaCha20 异或改变<b>值</b>。</li>
+    <li><b>它是混淆，不是加密。</b>数据密钥 <code>dek</code> 明文躺在头部偏移 64..95，任何拿到容器的人都能完整还原。机密性强度 <b>0 bit</b>。</li>
+  </ol>
+</section>
+
+<!-- ============================== 1 ============================== -->
+<section id="s1">
+  <h2 class="sec">1 · 项目基本介绍</h2>
+
+  <div class="card">
+    <h3>1.1 它做什么</h3>
+    <p class="plain">把任意文件重编码成一个自定义容器 <code>.bt3d</code>：文件按 <code>128 KiB</code> 切成层，每层的比特按<b>逆时针螺旋</b>填进 <code>1024×1024</code> 的平面格子，格子序号再经<b>密钥相关的仿射变换</b>打散、经<b>秩压缩</b>紧凑化，最后整层与 <b>ChaCha20 密钥流</b>异或落盘。总大小 = 原文件 + 恰好 <code>128</code> 字节。</p>
+    <div class="chain" id="chain"><!-- 五步映射链 --></div>
+    <p class="cap">五步全是双射 ⇒ 整体可逆。<b>约定 C4</b>：光栅方向是 <code>y</code> 升序（底行优先），与图像光栅相反 —— 照抄图像代码会上下翻转。</p>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>1.2 三层机制各修掉什么问题</h3>
+      <table class="t">
+        <thead><tr><th>机制</th><th>解决的问题</th><th>关掉会怎样</th></tr></thead>
+        <tbody>
+          <tr><td><b>螺旋</b> <code>s↔(x,y)</code></td><td>把线性比特流铺成二维面，并提供三维解释</td><td>盘面退化成一维条带</td></tr>
+          <tr><td><b>仿射</b> <code>r=(a·q+b) mod 2²⁰</code></td><td>修掉螺旋的<b>50% 恒等邻接泄露</b></td><td>原文件前 128 字节被原样抄进容器</td></tr>
+          <tr><td><b>秩压缩</b> <code>r'=rank(r)</code></td><td>末层不必补满一整层</td><td>1 字节的文件膨胀成 128 KiB</td></tr>
+          <tr><td><b>密钥流</b> ChaCha20 异或</td><td>消除压缩率指纹、位占比指纹、公共子串</td><td>值的分布仍是原文的分布</td></tr>
+        </tbody>
+      </table>
+      <p class="cap">第 3 节把这四个开关逐个关掉，看盘面怎么变。</p>
+    </div>
+
+    <div class="card">
+      <h3>1.3 为什么仿射散射非有不可</h3>
+      <p class="plain">存储扫描 <code>q = y·1024 + x</code> 在 <code>x</code> 方向连续，而螺旋的每条边里，<b>下边</b>沿 <code>x</code> 向右、<b>上边</b>沿 <code>x</code> 向左 —— 于是这两条边上「来源序号 <code>s</code> 步进 +1」与「盘面位置步进 ±1」重合，位置几乎没被打散。四类边各占正好 25%，所以是 <b>50% 的比特仍然紧邻</b>。</p>
+      <p class="plain">这不是参数没调好，而是一般性结论：只要存储扫描在 <code>x</code> 方向连续，两条水平边就必然落在 <code>|Δq| = 1</code> 上 —— 与起点选哪个角、顺/逆时针、<code>y</code> 朝上朝下、从哪一圈开始全都无关。最外圈下边覆盖 <code>s = 0..1022 → q = 0..1022</code>，紧接着右边第一格 <code>s = 1023 → q = 1023</code>，于是 <code>payload</code> 的前 1024 比特 = 原文件前 1024 比特 = <b>前 128 字节逐字节相同</b>。</p>
+      <div class="edgebars" id="edgebars"><!-- 四条边的 q 步进 / r 步进 --></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>1.4 工程结构</h3>
+    <p class="plain">零第三方依赖，只用 <code>node:crypto</code> / <code>node:zlib</code> / <code>node:fs</code>。四层结构，机制层五个模块互不依赖、只依赖契约层；<code>codec.js</code> 是唯一知道「层循环」存在的地方。</p>
+    <div class="arch" id="arch"><!-- 模块地图 --></div>
+  </div>
+</section>
+
+<!-- ============================== 2 ============================== -->
+<section id="s2">
+  <h2 class="sec">2 · 项目各个参数的介绍</h2>
+
+  <div class="card">
+    <h3>2.1 前 128 字节：真实头部的逐字节切片</h3>
+    <p class="plain">下面这条色带是<b>本次实跑产出的那个容器的头部</b>（规范挡 <code>flags=0x1c</code>），128 个格子一格一字节，按字段着色。鼠标移到任意一格，下方表格会高亮它属于哪个字段并显示解析值。</p>
+    <div class="headerband" id="headerband"></div>
+    <div class="legend" id="headerLegend"></div>
+    <table class="t" id="headerTable">
+      <thead><tr><th>偏移</th><th>长度</th><th>字段</th><th>类型</th><th>规范值 / 范围</th><th>本次实跑值</th><th>说明</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <p class="cap">加总核对：<code>4+1+1+2+8+8+4+4+12+20+32+32 = 128</code>，逐字节全覆盖、无空洞。多字节整数一律小端（约定 C1）。</p>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>2.2 <code>flags</code> 字节逐位（偏移 5）</h3>
+      <p class="plain">规范 profile = bit2 + bit3 + bit4 = <code>4+8+16 = 28 = 0x1C</code>。第 3 节的四挡阶梯就是按 <b>bit3 → bit4 → bit2</b> 的顺序逐个打开这三个位。</p>
+      <div class="bits" id="flagsBits"></div>
+      <table class="t" id="flagsTable">
+        <thead><tr><th>位</th><th>权重</th><th>常量名</th><th>规范值</th><th>含义</th><th>关掉会怎样</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <p class="cap">两个掩码 <code>FLAGS_NORMATIVE=0x1C</code> / <code>FLAGS_MUST_BE_ZERO=0xE3</code> 都由各个位常量<b>算出来</b>，并在模块加载时断言并集为 <code>0xFF</code>、交集为 <code>0x0</code>。规格初稿曾把手写的必零掩码写成 <code>0xC3</code>（漏了 bit5），后果是 <code>COMPRESSED=1</code> 的畸形容器会静默通过校验。</p>
+    </div>
+
+    <div class="card">
+      <h3>2.3 几何与尺寸常量</h3>
+      <table class="t" id="constTable">
+        <thead><tr><th>常量</th><th>值</th><th>为什么是这个值</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <h3>2.4 密钥材料与派生参数</h3>
+      <table class="t" id="deriveTable">
+        <thead><tr><th>参数</th><th>来源</th><th>本次实跑值</th><th>约束</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>2.5 五条硬性约定 —— 跨实现互通的全部前提</h3>
+    <table class="t">
+      <thead><tr><th>#</th><th>约定</th><th>规范值</th><th>不一致的后果</th></tr></thead>
+      <tbody>
+        <tr><td>C1</td><td>字节序</td><td>头部所有多字节整数一律小端</td><td>头部字段全部读错</td></tr>
+        <tr><td>C2</td><td>位序</td><td>MSB-first：<code>(B &gt;&gt; (7−j)) &amp; 1</code></td><td>每字节内 8 比特倒序。<b>写反了往返照样绿</b>，只有黄金向量能抓</td></tr>
+        <tr><td>C3</td><td>坐标系手性</td><td><code>x</code> 右、<code>y</code> 上、<code>z</code> 向屏幕外；逆时针 = 从 +Z 向 −Z 俯视</td><td>屏幕坐标 <code>y</code> 向下会让同一段代码输出顺时针，两份实现互为镜像</td></tr>
+        <tr><td>C4</td><td>光栅方向</td><td><code>q = y·1024 + x</code>，<code>y</code> 升序（底行优先）</td><td>与图像光栅相反，照抄图像代码会上下翻转</td></tr>
+        <tr><td>C5</td><td>全局比特序号</td><td><code>i = 字节序号 × 8 + 位序号</code>，位序号按 C2</td><td>与 C2 联动</td></tr>
+      </tbody>
+    </table>
+    <p class="cap">本页三维盘面的铺法遵循 C3/C4：<code>y = 0</code> 那一行（原文件前 128 字节所在）画在<b>朝向观察者的前缘</b>。金色的前缘标记线沿外法线挪到盘外一侧 —— 压在同一行上会盖掉该行自己的像素，而那一行正是 D1 挡要展示的青色落点。</p>
+  </div>
+</section>
+
+<!-- ============================== 3 ============================== -->
+<section id="s3">
+  <h2 class="sec">3 · 不同参数配置下的三维混淆效果</h2>
+
+  <div class="card ladder">
+    <h3>3.1 四挡阶梯：每挡只比上一挡多开一个位</h3>
+    <div class="chips" id="variantChips"></div>
+    <div class="ladderflow" id="ladderFlow"></div>
+  </div>
+
+  <div class="card stage">
+    <div class="controls" id="controls">
+      <div class="ctl-group">
+        <span class="ctl-label">视图</span>
+        <button class="seg" data-view="stack" title="九层盘面沿 Z 轴堆叠">层叠盘面</button>
+        <button class="seg" data-view="bars" title="单层按 1 占比立成柱子">高度场</button>
+      </div>
+      <div class="ctl-group">
+        <span class="ctl-label">叠加</span>
+        <label class="ck"><input type="checkbox" id="ckAdj"><span>恒等邻接（红）</span></label>
+        <label class="ck"><input type="checkbox" id="ckFront"><span>前 128 B 落点（青）</span></label>
+        <label class="ck"><input type="checkbox" id="ckPad"><span>补满的空位（蓝）</span></label>
+        <label class="ck"><input type="checkbox" id="ckXray" checked><span>半透明穿层</span></label>
+        <label class="ck"><input type="checkbox" id="ckAnno" checked><span>编号标注</span></label>
+      </div>
+      <div class="ctl-group">
+        <span class="ctl-label">层</span>
+        <select id="selLayer"></select>
+        <label class="ck"><input type="checkbox" id="ckAllLayers" checked><span>全部层</span></label>
+      </div>
+      <div class="ctl-group">
+        <span class="ctl-label">旋转 <output id="outAz"></output></span>
+        <input type="range" id="rgAz" min="-180" max="180" value="-34">
+        <input type="range" id="rgEl" min="5" max="88" value="52" title="仰角">
+      </div>
+      <div class="ctl-group">
+        <span class="ctl-label">层距 <output id="outGap"></output></span>
+        <input type="range" id="rgGap" min="6" max="100" value="80">
+      </div>
+      <div class="ctl-group">
+        <span class="ctl-label">缩放 <output id="outZoom"></output></span>
+        <span class="hint">滚轮 · 右键或 Shift 拖 = 平移</span>
+      </div>
+      <div class="ctl-group">
+        <button class="seg" id="btnSpin">自转</button>
+        <button class="seg" id="btnReset">复位视角</button>
+      </div>
+      <p class="hint">画布上按住左键拖动 = 同时改方位角与仰角；滚轮 = 以光标为锚缩放（0.4×–8×）；右键或 Shift 拖动 = 平移；「复位视角」把角度、层距、缩放、平移一次清干净。×1.00 就是自适应铺满那一态，此时右侧「是否越界」才成立；放大后画面本就该被画布裁掉。切换挡位时视角、缩放与叠加保持不变，便于逐格对比。</p>
+    </div>
+
+    <div class="stage-body">
+      <canvas id="main3d" width="960" height="640"></canvas>
+      <aside class="readout" id="stageReadout"></aside>
+    </div>
+
+    <ol class="annokey" id="annoKey"></ol>
+    <p class="cap">编号圆牌落在<b>取景包围盒之外</b>，引线指向由投影式子现算的锚点 —— 旋转、缩放、平移之后仍指着同一个地方；标在图案自己身上的做法这一轮栽过：金线压在它标记的那一行上，把 D1 的青色落点整个糊掉了。标记当前条件不出现的行会灰掉。</p>
+
+    <div class="minis" id="minis"></div>
+    <p class="cap">四个小图与大图共用同一组角度参数，但<b>不跟缩放与平移</b> —— 各自铺满自己那格，职责是并排对照。<b>D2 / D3 / OK 的几何完全相同</b>（同一个仿射键），所以它们的盘面排布一致，差别只出现在末层与值分布上；<b>D1 是另一个几何键</b>，一眼就能看出区别在哪。</p>
+  </div>
+
+  <div class="card">
+    <h3>3.2 实测指标对照</h3>
+    <div class="scrollx"><table class="t metrics" id="metricsTable"></table></div>
+    <p class="cap">绿 = 达到规范阈值；红 = 未达标；灰 = 该挡不适用。判据编号沿用仓库的冻结编号（1~15 只追加不重排）。所有数来自 <code>node build-data.mjs</code> 这一次实跑，不是引用 README 的台账。</p>
+  </div>
+
+  <div class="card">
+    <h3>3.3 近景：盘面与「前 128 字节」的逐格对照</h3>
+    <p class="plain">左：第 0 层盘面按<b>存储序号</b>铺（也就是它在容器里真的怎么排），红=恒等邻接、青=前 1024 比特的落点。右：<code>payload</code> 最前面 128 字节展开成 128×8 的比特格，与原文同样排布并列 —— 相同就画成同色。</p>
+    <div class="closeups">
+      <figure><canvas id="plane2d" width="512" height="512"></canvas><figcaption id="plane2dCap"></figcaption></figure>
+      <div class="bitcmp">
+        <div class="bitrow"><span class="rowlab">原文前 128 B</span><canvas id="bitsOrig" width="512" height="40"></canvas></div>
+        <div class="bitrow" id="bitsVariantHost"></div>
+        <div class="bitnote" id="bitNote"></div>
+      </div>
+    </div>
+    <div class="frontzoom" id="frontZoom"></div>
+  </div>
+
+  <div class="card">
+    <h3>3.4 逐级结论：每一步只让一个数变</h3>
+    <div class="steps" id="ladderSteps"></div>
+  </div>
+
+  <div class="card">
+    <h3>3.5 生成器自检表（14 条，必须全绿才允许出图）</h3>
+    <p class="plain">出图前先自证。任一 FAIL，脚本直接 <code>exit 1</code> 并且<b>不写</b> <code>data.js</code> —— 宁可不出图，也不出一张说谎的图。</p>
+    <table class="t" id="checksTable">
+      <thead><tr><th>#</th><th>断言</th><th>实测证据</th><th>结果</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============================== 4 ============================== -->
+<section id="s4">
+  <h2 class="sec">4 · 口径与未验证项</h2>
+  <div class="grid2">
+    <div class="card">
+      <h3>数据口径</h3>
+      <ul class="plain-list" id="scopeList"></ul>
+    </div>
+    <div class="card">
+      <h3>这张图画不了的东西</h3>
+      <ul class="plain-list warn" id="limitsList"></ul>
+    </div>
+  </div>
+  <div class="card">
+    <h3>重新生成</h3>
+    <pre class="code">cd node 所在目录的上一级
+node demo-3d/build-data.mjs      # 实跑 + 自检 + 覆盖写 demo-3d/data.js
+双击 demo-3d/index.html          # 零 CDN、零构建、零服务器</pre>
+    <p class="cap"><code>data.js</code> 是生成物（约 1.3 MiB）。输入取本机 <code>node.exe</code> 的前 1,117,504 字节，换机器或升级 Node 后重跑，指标会变；纯几何量（<code>a/b/aInv</code>、<code>|Δ|=1</code> 中位数）不依赖输入，可与仓库台账互相印证。</p>
+  </div>
+</section>
+
+<footer class="foot">
+  <span>BT3D v1 · Node 参考实现的演示图</span>
+  <span>规范性文档：<code>../格式规格.md</code>；全景文档：<code>../node/README.md</code></span>
+</footer>
+
+<script src="data.js"></script>
+<script src="render.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
