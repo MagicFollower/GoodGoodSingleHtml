@@ -60,11 +60,13 @@ node --version
 ```bash
 cd node
 
-# 第 1 步：编码
-node src/cli.js encode 任意文件 输出.bt3d
-# 预期：编码完成: N 字节 → N+128 字节，K 层，T ms
+# 第 1 步：编码（输出名可以省略）
+node src/cli.js encode 任意文件              # → 任意文件.bt3d
+node src/cli.js encode 任意文件 输出.bt3d     # 显式指定，效果相同
+# 预期：编码完成: N 字节 → N+128 字节，K 层
+#              输出 任意文件.bt3d（输出名缺省 = 源文件名 + .bt3d），T ms
 
-# 第 2 步：还原
+# 第 2 步：还原（两个参数都必填）
 node src/cli.js decode 输出.bt3d 还原文件
 # 预期：解码完成: N 字节，K 层，写出 N 字节，T ms
 
@@ -72,6 +74,8 @@ node src/cli.js decode 输出.bt3d 还原文件
 cmp 任意文件 还原文件 && echo 一致
 # 预期：一致
 ```
+
+缺省输出名的规则是**追加**而不是替换后缀：`archive.tar.gz → archive.tar.gz.bt3d`。理由见第 7.8 节。
 
 本机实测（输入为 `node.exe` 的前 5 MiB，5,242,880 字节）：
 
@@ -431,31 +435,38 @@ GV-4 头部 hex 总长度 = 256 字符 = 128 字节
 ```
 比特3维化/
 ├── 格式规格.md              ← 规范性文档（跨栈唯一权威）
-└── node/
-    ├── README.md            ← 本文
-    ├── package.json         ← 零依赖，"type": "module"
-    ├── src/
-    │   ├── constants.js     ← 契约层：常量、头部偏移、加载期断言
-    │   ├── spiral.js        ← 机制层：螺旋闭式 + 2048 段等差表
-    │   ├── affine.js        ← 机制层：仿射变换 + HKDF 派生 + 模逆
-    │   ├── rank.js          ← 机制层：秩压缩索引（位图 + 字级前缀和）
-    │   ├── keystream.js     ← 机制层：ChaCha20 绑定
-    │   ├── header.js        ← 机制层：头部构造、解析、HMAC
-    │   ├── codec.js         ← 编排层：分层循环、散射/聚集、流式 I/O
-    │   └── cli.js           ← 接口层：encode / decode / inspect
-    └── test/
-        ├── criteria.js      ← 判据 1~15 + prove-red
-        ├── reference.js     ← 慢路径参照实现 + 几何审计
-        ├── defects.js       ← 缺陷注入（D5 / D6）
-        ├── vectors.js       ← 黄金向量生成与对拍
-        └── golden-vectors.json  ← 6 组向量（生成物，纳入版本控制）
+├── node/
+│   ├── README.md            ← 本文
+│   ├── package.json         ← 零依赖，"type": "module"
+│   ├── src/
+│   │   ├── constants.js     ← 契约层：常量、头部偏移、加载期断言
+│   │   ├── spiral.js        ← 机制层：螺旋闭式 + 2048 段等差表
+│   │   ├── affine.js        ← 机制层：仿射变换 + HKDF 派生 + 模逆
+│   │   ├── rank.js          ← 机制层：秩压缩索引（位图 + 字级前缀和）
+│   │   ├── keystream.js     ← 机制层：ChaCha20 绑定
+│   │   ├── header.js        ← 机制层：头部构造、解析、HMAC
+│   │   ├── codec.js         ← 编排层：分层循环、散射/聚集、流式 I/O
+│   │   └── cli.js           ← 接口层：encode / decode / inspect
+│   └── test/
+│       ├── criteria.js      ← 判据 1~15 + prove-red
+│       ├── reference.js     ← 慢路径参照实现 + 几何审计
+│       ├── defects.js       ← 缺陷注入（D5 / D6）
+│       ├── vectors.js       ← 黄金向量生成与对拍
+│       └── golden-vectors.json  ← 6 组向量（生成物，纳入版本控制）
+└── sdk/
+    ├── bt3d-encode.js       ← 自包含单文件编码器（CommonJS，零依赖）
+    ├── bt3d-decode.js       ← 自包含单文件解码器（同上）
+    ├── interop-check.js     ← 与 node/src/ 的逐字节对拍检查（6 个用例）
+    └── README.md            ← 引入方式、API 表、边界
 ```
+
+`sdk/` 里的两个文件各自内联了一份完整格式实现，与 `node/src/` 是**重复实现**而不是同一份代码 —— 目的是让任何项目拷走一个文件就能用。重复的漂移风险由 `sdk/interop-check.js` 守住。
 
 ### 4.2 依赖图
 
 ```mermaid
 flowchart TD
-  CLI["cli.js<br/>命令行入口<br/>74 行"]
+  CLI["cli.js<br/>命令行入口<br/>95 行"]
   CODEC["codec.js<br/>编解码核心<br/>308 行"]
   subgraph PRIM["机制层 · 几何与密码原语"]
     SPIRAL["spiral.js<br/>螺旋映射<br/>74 行"]
@@ -597,14 +608,17 @@ flowchart TD
 | 226 | `encodeFile` | 流式编码：边写边喂 HMAC，最后定位写回 tag |
 | 259 | `decodeFile` | 流式解码：**两遍**，第二遍才创建输出文件 |
 
-### 5.8 `src/cli.js`（74 行）
+### 5.8 `src/cli.js`（95 行）
 
 | 行 | 符号 | 说明 |
 | --- | --- | --- |
-| 18 | `inspect(path)` | 打印头部全字段 + 派生的 a/b/aInv + 模逆自校验 |
-| 49 | 参数解构 | `[, , cmd, a1, a2] = process.argv` |
-| 52 / 57 / 62 | `encode` / `decode` / `inspect` 分派 | 各自计时并打印 |
-| 68-74 | 错误处理 | `Bt3dError` → 打印 `[code] message` + 退出码 1；其他异常继续抛 |
+| 11 | `USAGE` | 三个子命令的用法文本，含缺省输出名示例 |
+| 24 | `defaultOutPath(inPath)` | `inPath + '.bt3d'`（追加，不剥原后缀） |
+| 28 | `assertDistinct(inPath, outPath)` | 同名输入/输出 → `SAME_PATH`，拒绝就地覆盖 |
+| 35 | `inspect(inPath)` | 打印头部全字段 + 派生的 a/b/aInv + 模逆自校验 |
+| 66 | 参数解构 | `[, , cmd, a1, a2] = process.argv` |
+| 69 / 77 / 83 | `encode` / `decode` / `inspect` 分派 | `encode` 只要求 `a1`，`out = a2 ?? defaultOutPath(a1)` |
+| 89-95 | 错误处理 | `Bt3dError` → 打印 `[code] message` + 退出码 1；其他异常继续抛 |
 
 ### 5.9 `test/`（788 行）
 
@@ -968,6 +982,31 @@ try {
 把「容器不合法」和「程序有 bug」区分开：前者退出码 1 + 一行人类可读的错误码，后者保留完整堆栈。**不要**用 `catch (e) { console.error(e.message) }` 一把抓 —— 那会把实现 bug 伪装成格式错误。
 
 `inspect` 额外打印 `a * a_inv mod 2^20` 的自校验结果，让「这个容器的派生参数是否自洽」不需要跑测试就能看见。
+
+**`encode` 的第二个参数可省（`cli.js:69-71`）**
+
+痛点：最常见的用法就是"把这个文件混淆一下"，输出名根本没有信息量 —— 调用方每次都手打一遍 `源文件名.bt3d`，打错了还会写出一个想不到的文件。
+
+设计：`out = a2 ?? defaultOutPath(a1)`，缺省规则是**追加** `.bt3d` 而不是替换后缀。三条理由：
+
+| 候选规则 | `archive.tar.gz` 的结果 | 问题 |
+| --- | --- | --- |
+| 替换最后一个后缀 | `archive.tar.bt3d` | 丢掉 `gz` 这一层信息，且当目录里已有 `archive.tar` 时会覆盖它 |
+| 只留主名 | `archive.bt3d` | 丢两层信息，撞名概率更高 |
+| **追加（采用）** | `archive.tar.gz.bt3d` | 名字里保留了完整来源信息；缺省名永远不等于输入名，所以不可能就地覆盖源文件 |
+
+配套的两条：
+- `decode` 的两个参数**保持必填**。容器里没有名字字段（128 字节只放 `origSize / layerCount / dimX / dimY / nonce / dek / tag`），任何缺省名都只能靠猜，而猜错就是覆盖别人的文件。
+- 输入与输出解析到同一路径时抛 `SAME_PATH`（`cli.js:28`），不做原地覆盖。编码是边读边写，同名只会毁掉源文件。比较口径是 `path.resolve()` 后转小写再去掉结尾的点 —— Windows 认为 `a`、`A`、`a.` 是同一个文件。
+
+缺省名会覆盖**同名的旧容器**：目录里已有 `a.bt3d` 时，再跑一次 `encode a` 就把它换掉了。这是"重新生成产物"的常规预期，但它确实是一次写入 —— 想留旧版本就显式给第二个参数。
+
+实测（`node src/cli.js encode a.jpg`，源文件 720 字节）：
+
+```
+编码完成: 720 字节 → 848 字节，1 层
+        输出 a.jpg.bt3d（输出名缺省 = 源文件名 + .bt3d），6 ms
+```
 
 ---
 
@@ -1520,6 +1559,8 @@ file_nonce = 425433442d6e6f6e63652d31                                           
 | `scatterFull` / `gatherFull` 的段递推 | 满层 payload 改变 | 判据 10 + 黄金向量 GV-5 | **是** |
 | `decodeFile` 的 I/O 顺序 | 不影响容器字节 | §11.7 的 clobber 回归 | 否 |
 | `cli.js` 的输出文案 | 不影响容器字节 | 无 | 否 |
+| `cli.js` 的缺省输出名规则 | 不影响容器字节 | `sdk/interop-check.js` 的 C3 / C5 | 否 |
+| `sdk/*.js` 内联的格式实现 | **影响**（它就是又一份实现） | `node sdk/interop-check.js`（C1~C6） | 是（若容器字节变了） |
 | 新增判据 | 无 | 追加编号，不重排 | 否 |
 
 ### 12.2 三条硬规矩
@@ -1532,15 +1573,25 @@ file_nonce = 425433442d6e6f6e63652d31                                           
 
 | 文件 | 行 | 性质 |
 | --- | --- | --- |
-| `../格式规格.md` | 1291 | 规范性文档，跨栈唯一权威 |
-| `README.md` | 1669 | 全景文档，自包含，含 9 张 mermaid 图与 12 条 FAQ |
-| `package.json` | 24 | 零依赖 |
-| `src/*.js` × 8 | 772 | 生产代码 |
+| `../格式规格.md` | 1329 | 规范性文档，跨栈唯一权威 |
+| `README.md` | 1720 | 全景文档，自包含，含 9 张 mermaid 图与 12 条 FAQ |
+| `package.json` | 21 | 零依赖；脚本 `test` / `prove-red` / `vectors` / `sdk-check` |
+| `src/*.js` × 8 | 793 | 生产代码 |
 | `test/criteria.js` | 508 | 判据 1~15 + prove-red |
 | `test/reference.js` | 85 | 慢路径参照 + 几何审计 |
 | `test/defects.js` | 81 | 缺陷注入 D5 / D6 |
 | `test/vectors.js` | 114 | 黄金向量生成与对拍 |
 | `test/golden-vectors.json` | — | 6 组向量，生成物但纳入版本控制 |
+| `../sdk/bt3d-encode.js` | 425 | 自包含单文件编码器（CommonJS，零依赖） |
+| `../sdk/bt3d-decode.js` | 461 | 自包含单文件解码器 |
+| `../sdk/interop-check.js` | 265 | SDK ↔ 参考实现的对拍检查（C1~C6） |
+| `../sdk/README.md` | 200 | SDK 引入方式、API 表、错误码、边界 |
+| `../参数与场景技术参考.md` | 2967 | 参数含义 + 代码格式底线 + 12 个场景（分析文档，不改规范） |
+| `../几何散射与纯ChaCha20对比.md` | 666 | 拆掉几何机器后的逐项实测对比（分析文档，不改规范） |
+
+### 12.4 第 12.2 节硬规矩的补充
+
+4. **改任何影响容器字节的东西，除了重生成黄金向量，还要跑 `node sdk/interop-check.js`**。黄金向量证明"实现和自己一致"，对拍检查证明"sdk/ 里那份重复实现和 node/src/ 那份是同一个格式"。前者红不代表后者绿 —— 两边同时改错时黄金向量会被重新生成而永不报警。
 
 ---
 

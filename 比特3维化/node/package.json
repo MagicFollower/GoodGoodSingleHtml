@@ -10,7 +10,8 @@
   "scripts": {
     "test": "node test/criteria.js",
     "prove-red": "node test/criteria.js --prove-red",
-    "vectors": "node test/vectors.js"
+    "vectors": "node test/vectors.js",
+    "sdk-check": "node ../sdk/interop-check.js"
   },
   "engines": {
     "node": ">=20"
