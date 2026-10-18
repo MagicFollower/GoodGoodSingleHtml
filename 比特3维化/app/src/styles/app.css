@@ -1,0 +1,427 @@
+* {
+  box-sizing: border-box;
+}
+
+.app {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+/* ---------- 顶栏 ---------- */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+  height: 62px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  backdrop-filter: blur(10px);
+  flex-shrink: 0;
+}
+
+.topbar__brand {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.topbar__title {
+  font-size: 1.06rem;
+  font-weight: 650;
+  letter-spacing: 0.2px;
+}
+
+.topbar__sub {
+  font-size: 0.74rem;
+  color: var(--ink-3);
+}
+
+.topbar__spacer {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.topbar__chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 0.74rem;
+  color: var(--ink-2);
+}
+
+/* ---------- 栅格：1400 三列 / 1100 两列 / 其余一列 ---------- */
+
+.layout {
+  display: grid;
+  gap: var(--gap);
+  padding: var(--gap);
+  flex: 1 1 auto;
+  min-height: 0;
+  grid-template-columns: 236px minmax(0, 1fr) 380px;
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: 'nav main side';
+  overflow: hidden;
+}
+
+.nav,
+.main,
+.side {
+  min-height: 0;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+
+/* 只许纵向滚：规范会把另一轴的 visible 降级成 auto，浮出一条谁都没要的横滚条 */
+.nav,
+.main,
+.side {
+  overflow-x: clip;
+}
+
+.panel--dense {
+  padding: 10px 12px;
+}
+
+/* 两列/一列挡位：两栏各自可滚，但不许谁被压成 0 高。
+ * 实测（--probe，1264×755）旧写法 grid-template-rows: minmax(0,1fr) auto 下
+ * main=[244,76 1006x0] scrollH=449 —— side 的内容（701px）比可用高度（617px）还高，
+ * auto 行把它挤干，整个中间列（当前挡位的全部控件）不可见，
+ * 且 FadeContent 因盒高 0 从不 intersects，切挡后停在 opacity:0。 */
+@media (max-width: 1399px) {
+  .layout {
+    grid-template-columns: 216px minmax(0, 1fr);
+    grid-template-areas:
+      'nav main'
+      'nav side';
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+    overflow: auto;
+  }
+}
+
+@media (max-width: 1099px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'nav'
+      'main'
+      'side';
+    grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+.nav {
+  grid-area: nav;
+  min-width: 0;
+}
+
+.main {
+  grid-area: main;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  overflow: auto;
+}
+
+.side {
+  grid-area: side;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+/* 只让真正要滚的块收缩，标题行与工具条不能被压扁 */
+.main > *:not(.main__scroll) {
+  flex-shrink: 0;
+}
+
+/* 中间区域的卡片节奏。
+ * 这一层必须自己给间距：FadeContent 的包装 div 原本是普通块盒，两张 .panel 之间
+ * 实测 上间隔=0（--probe 的 PROBE-CARDS 行，五挡全 0），挨在一起只靠圆角和阴影撑出一点错觉。
+ * .main 自己的 gap 永远用不到 —— 它只有这一个子元素。 */
+.view-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+/* ---------- 面板内部 ---------- */
+
+.panel {
+  padding: var(--pad);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  min-width: 0;
+}
+
+.panel__title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 0.94rem;
+  font-weight: 640;
+  margin-bottom: 10px;
+}
+
+.panel__title-text {
+  color: var(--accent);
+  font-weight: 660;
+}
+
+.panel__hint {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--ink-3);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.field__label {
+  font-size: 0.76rem;
+  color: var(--ink-3);
+  letter-spacing: 0.3px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.row--tight {
+  gap: 8px;
+}
+
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+/* ---------- 拖放区 ---------- */
+
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 152px;
+  padding: 18px;
+  border: 1px dashed var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  text-align: center;
+  cursor: copy;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.dropzone[data-over='1'] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 60%, var(--surface-2));
+}
+
+.dropzone__title {
+  font-size: 0.96rem;
+  font-weight: 620;
+}
+
+.dropzone__sub {
+  font-size: 0.76rem;
+  color: var(--ink-3);
+}
+
+/* ---------- 任务行 ---------- */
+
+.job {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  background: transparent;
+  text-align: left;
+}
+
+.job[data-selected='1'] {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.job__name {
+  font-size: 0.84rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.job__meta {
+  font-size: 0.72rem;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.job__bar {
+  height: 3px;
+  margin-top: 4px;
+  border-radius: 2px;
+  background: var(--line-2);
+  overflow: hidden;
+}
+
+.job__bar i {
+  display: block;
+  height: 100%;
+  background: var(--run);
+  transition: width 140ms linear;
+}
+
+.job[data-status='done'] .job__bar i {
+  background: var(--ok);
+}
+
+.job[data-status='failed'] .job__bar i {
+  background: var(--err);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  border: 1px solid var(--line);
+  color: var(--ink-2);
+  background: var(--surface);
+  white-space: nowrap;
+}
+
+.pill[data-tone='ok'] {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 45%, var(--line));
+}
+
+.pill[data-tone='err'] {
+  color: var(--err);
+  border-color: color-mix(in srgb, var(--err) 45%, var(--line));
+}
+
+.pill[data-tone='run'] {
+  color: var(--run);
+  border-color: color-mix(in srgb, var(--run) 45%, var(--line));
+}
+
+.pill--wide {
+  white-space: normal;
+  padding: 8px 12px;
+  border-style: dashed;
+  line-height: 1.5;
+}
+
+/* ---------- 检查表 ---------- */
+
+.kv {
+  display: grid;
+  grid-template-columns: 122px minmax(0, 1fr);
+  gap: 6px 10px;
+  font-size: 0.8rem;
+}
+
+.kv dt {
+  color: var(--ink-3);
+}
+
+.kv dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+
+/* ---------- 状态栏 ---------- */
+
+.statusbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 10px;
+  height: 34px;
+  padding: 0 16px;
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg) 84%, transparent);
+  font-size: 0.74rem;
+  color: var(--ink-3);
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.statusbar > * {
+  flex-shrink: 0;
+}
+
+.statusbar .muted {
+  white-space: nowrap;
+}
+
+.statusbar__msg {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* DecryptedText 把每个字符包成 span，父层的 nowrap 传不进去，得直接按住 */
+.statusbar__msg span {
+  white-space: nowrap;
+}
+
+.muted {
+  color: var(--ink-3);
+}
+
+.err {
+  color: var(--err);
+}
+
+.ok {
+  color: var(--ok);
+}

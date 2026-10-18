@@ -1,0 +1,288 @@
+{
+  "host": "https://www.reactbits.dev/r/",
+  "variant": "TS-CSS",
+  "fetchedAt": "2026-10-18T11:06:49.642Z",
+  "components": {
+    "DarkVeil": {
+      "variant": "TS-CSS",
+      "imported": [
+        "react"
+      ],
+      "files": {
+        "DarkVeil.css": "222eb48619680a858be5b6553d451a7630cd12b65e98bc24a025fc367df6d769",
+        "DarkVeil.tsx": "bf19e096ea23be65c90d36853e77759de846457926e4fdeb96b7be810afcd59c"
+      }
+    },
+    "LineSidebar": {
+      "variant": "TS-CSS",
+      "imported": [
+        "react"
+      ],
+      "files": {
+        "LineSidebar.css": "c54eb77aec1a1311c17cdf97fb69be8cc85b4e28e7749cd92e81dfe0aa3a2481",
+        "LineSidebar.tsx": "ca5182a5a0b25f04b1a8172ee2d679111de5836fef5c37c4fa709d6dd7e63f94"
+      }
+    },
+    "SplitText": {
+      "variant": "TS-CSS",
+      "imported": [
+        "react",
+        "gsap",
+        "@gsap"
+      ],
+      "files": {
+        "SplitText.tsx": "587d6ee0fe020952156d6c43f7a983f9313ca90c5cab15a66b366ad35f467514"
+      }
+    },
+    "GradientText": {
+      "variant": "TS-CSS",
+      "imported": [
+        "react"
+      ],
+      "files": {
+        "GradientText.css": "9ff55e744f20f542c810577403c3fd3d1baba0210e4ab1fa5fa0bb1e28fb0c89",
+        "GradientText.tsx": "eba84cb82b1d2a9239a8b3c4aba84d07ef6135704d51de8d142854edf76097ab"
+      }
+    },
+    "ShinyText": {
+      "variant": "TS-CSS",
+      "imported": [
+        "react"
+      ],
+      "files": {
+        "ShinyText.css": "6030200a8885aba91536e2e367a0ed316989f10122f9d91a20f09caf1b5f46ab",
+        "ShinyText.tsx": "4748b686d55e8fc2b09cb69843c1417e2bf78d0eaac0db368442ea1c258b00b3"
+      }
+    },
+    "DecryptedText": {
+      "variant": "TS-CSS",
+      "imported": [
+        "motion"
+      ],
+      "files": {
+        "DecryptedText.tsx": "346c2e4a27404ec6efc5c52fc2fbcaeb38e7e32d1d7c46247b53907632c86804"
+      }
+    },
+    "GlassSurface": {
+      "variant": "TS-CSS",
+      "imported": [
+        "react"
+      ],
+      "files": {
+        "GlassSurface.css": "90cfc3ad54ad7aa92bb2b700696e2d9f2d8704162ba1b94ebf0b6f8dcecc4e61",
+        "GlassSurface.tsx": "3cfd551b02c48aab38418a1de724ebba35c276c27bd11dcf032197f5c6d56888"
+      }
+    },
+    "SpotlightCard": {
+      "variant": "TS-CSS",
+      "imported": [
+        "react"
+      ],
+      "files": {
+        "SpotlightCard.css": "b646b7da4bb46f0a4d819d0af275804c49a845a5c2dc848700aaf9282db13a92",
+        "SpotlightCard.tsx": "581d8859b8b780a61f3710b5d39b9e37a365742626cf30858a5fdbfbfb4d8807"
+      }
+    },
+    "BorderGlow": {
+      "variant": "TS-CSS",
+      "imported": [
+        "react"
+      ],
+      "files": {
+        "BorderGlow.css": "c6b645f1ff163046b55246a6a4f98b47d75868f4879ef445f0a83b5636acc6b4",
+        "BorderGlow.tsx": "a4f7804d358846d6ccfad555c197d024c521d8480c8e6bb2f2a5c25102f94a35"
+      }
+    },
+    "TiltedCard": {
+      "variant": "TS-CSS",
+      "imported": [],
+      "files": {
+        "TiltedCard.css": "6214acb092fd97b67af30712ae7d53590bd65ee695c79867410dbed68a042904",
+        "TiltedCard.tsx": "ca6b76a91a87659987c872b8a000e8776bc885d70aeeded46da9b9645554e07e"
+      }
+    },
+    "GlassIcons": {
+      "variant": "TS-CSS",
+      "imported": [],
+      "files": {
+        "GlassIcons.css": "c85801f8d4e5cefbccf564c40603ccf1ddb4f6109f65b5ca96e51f85663f16bb",
+        "GlassIcons.tsx": "a762319f5f78c4dc9348aaea6ba8bf957faf97a65ff5dda5466aa6e2a6b89176"
+      }
+    },
+    "JellyRadio": {
+      "variant": "TS-CSS",
+      "imported": [],
+      "files": {
+        "JellyRadio.css": "3412e68536d0107fbae6f858a0582afd733e9cea3066d38b0c86619b19ae08e0",
+        "JellyRadio.tsx": "03656d5aed4cbc70b3e47f0874bbca65262224a07038aa9235d867376a1c7c34"
+      }
+    },
+    "SquishSwitch": {
+      "variant": "TS-CSS",
+      "imported": [
+        "motion"
+      ],
+      "files": {
+        "SquishSwitch.css": "c05d751d50995b2683ea005098c8459694e03a2c2a3d532f4ab545aac5d5dfcb",
+        "SquishSwitch.tsx": "e373bbd3e3a35d72e4253b82c4747f44ab983777c070acff467d51ea1721dfb1"
+      }
+    },
+    "GlideSelect": {
+      "variant": "TS-CSS",
+      "imported": [
+        "react",
+        "@hugeicons"
+      ],
+      "files": {
+        "GlideSelect.css": "2004ce25349676b1cb056a2169a6b1fc833b4cde3effd1302a0a4b1edb3aaebc",
+        "GlideSelect.tsx": "4ab4dec9aeafdbb84137d2e78ae4b49369604a1e17b24491c932b8891d8fb499"
+      }
+    },
+    "CurvedInput": {
+      "variant": "TS-CSS",
+      "imported": [],
+      "files": {
+        "CurvedInput.css": "42cf7b33fdf3824a00c2fe8cf5314f86d1e15ff083ee5aa0972d92b3f3b202e4",
+        "CurvedInput.tsx": "8430e26df6594947406216d625b0ae17e0fec4e7b5c03e55438b464aff6c2c85"
+      }
+    },
+    "SpecularButton": {
+      "variant": "TS-CSS",
+      "imported": [
+        "react"
+      ],
+      "files": {
+        "SpecularButton.css": "af7cad9998bd6102a21fd05da11890ca05c061f9d5e6c96f540fb744684442a9",
+        "SpecularButton.tsx": "9ec0e4ee0ec0d69abca5fb568a73a4987a1d4159fdfb9cc407cd598120897559"
+      }
+    },
+    "HoldButton": {
+      "variant": "TS-CSS",
+      "imported": [
+        "react"
+      ],
+      "files": {
+        "HoldButton.css": "f0f9075ad99c2599ef200aa681374c4802faa39bc851e5110f55c56c0a1ab712",
+        "HoldButton.tsx": "73e1b82868aa1ad264d73a5e6889136e13b20bdbb081ed9c2da5bc5908fe00ed"
+      }
+    },
+    "FlyingButton": {
+      "variant": "TS-CSS",
+      "imported": [],
+      "files": {
+        "FlyingButton.css": "64d7be9ace7381295e6faf538d2f6f8ae29e8d98b7c516186cf9bd2060111809",
+        "FlyingButton.tsx": "a583c02e52ff369830f8c7a74beb5c5b6e097058f03465952cf321a330219b7a"
+      }
+    },
+    "StarBorder": {
+      "variant": "TS-CSS",
+      "imported": [
+        "react"
+      ],
+      "files": {
+        "StarBorder.css": "128fe0068b2d7964c28488d24465626ff34f3143a66082a6548a1a1f57c987d2",
+        "StarBorder.tsx": "3da1c1856f3b41fbc9f9a7ecf945e6248de44464f763cd5162bb73fee0f30f17"
+      }
+    },
+    "CometDial": {
+      "variant": "TS-CSS",
+      "imported": [
+        "react",
+        "motion"
+      ],
+      "files": {
+        "CometDial.css": "428afc3fcf354f50aa21fc422755f88828fa8e0c1bc0f054b443c95630bc7197",
+        "CometDial.tsx": "96a495a64c3b7e0fc3d4a908c9f3c95be248bb5277469d0d0cc946ac89b63559"
+      }
+    },
+    "LatticeLoader": {
+      "variant": "TS-CSS",
+      "imported": [
+        "react"
+      ],
+      "files": {
+        "LatticeLoader.css": "db8d5628298fff6d02b44bb4d31a455578ceece2dfa84769bc8a26e416af5790",
+        "LatticeLoader.tsx": "cb50863540f95ee338e6b1e38744e5fe445e1ae4336f39a6bdc0adae2fc0686c"
+      }
+    },
+    "StatusMark": {
+      "variant": "TS-CSS",
+      "imported": [
+        "react",
+        "motion"
+      ],
+      "files": {
+        "StatusMark.css": "9c46c47df3729a4e1d258d7a77521faa08fc445fd1ea8b8c4ade8bdb8c2e45c9",
+        "StatusMark.tsx": "569d152892cb788cf5f1b602542fc67bc77faa89fde7cc1f1482cdfc7d3a8959"
+      }
+    },
+    "Counter": {
+      "variant": "TS-CSS",
+      "imported": [],
+      "files": {
+        "Counter.css": "9f224c728e16bb2b4137cd0e5a3ff370043bc9c838450fa8aaed89e190a8a6f8",
+        "Counter.tsx": "26576e940720dde4069c8283fcb634449d4765505889af2edbda32f2e1bd2809"
+      }
+    },
+    "SloshGauge": {
+      "variant": "TS-CSS",
+      "imported": [],
+      "files": {
+        "SloshGauge.css": "2770955520f32bbd05939e70e63228492b9798a197b66a78d68847d5939cabe0",
+        "SloshGauge.tsx": "430be4dcf7ae65fc55e7941baf217b91f0ab0351b1f19deae9b7859a801cc056"
+      }
+    },
+    "AnimatedList": {
+      "variant": "TS-CSS",
+      "imported": [
+        "react",
+        "@hugeicons"
+      ],
+      "files": {
+        "AnimatedList.css": "c9b74ad88b92e9836b6ec91ad21170da5d5325cfd0a1a18d1a863e545d8baffc",
+        "AnimatedList.tsx": "dcd33973cb71bb13485a2aa3ef76cb7372d0dd783c94d748709560e939152691"
+      }
+    },
+    "Shredder": {
+      "variant": "TS-CSS",
+      "imported": [
+        "react-dom"
+      ],
+      "files": {
+        "Shredder.css": "fac84b2dfbb2ed9500cfdcfb41f6e5693c4b2c09259405ee408246a72718cecd",
+        "Shredder.tsx": "ec26def6027a2c085e7bdbedf1940bc978b5c693ecf5aed217c0bd6b727ce1c2"
+      }
+    },
+    "FadeContent": {
+      "variant": "TS-CSS",
+      "imported": [
+        "react",
+        "gsap"
+      ],
+      "files": {
+        "FadeContent.tsx": "c69fd8ee01ee6a92d4f3656a7add3ba3f374e70027ecd46e1ad58e874f0389d5"
+      }
+    },
+    "GradualBlur": {
+      "variant": "TS-CSS",
+      "imported": [
+        "react"
+      ],
+      "files": {
+        "GradualBlur.css": "de9d5c313982db8f05629b3b63b019ca5bc8574d1f37d13cf2a4d51e0c45b991",
+        "GradualBlur.tsx": "e7af7a0efb53c5266849a7ae3b5ec07c42a98a16f84b8003a7ac763194ac45bc"
+      }
+    },
+    "WarmTooltip": {
+      "variant": "TS-CSS",
+      "imported": [
+        "react-dom"
+      ],
+      "files": {
+        "WarmTooltip.css": "241941731b1a83626caa3df16bb535e55ece65591154d5eac4ea9c5e3e940386",
+        "WarmTooltip.tsx": "69ffa99b90c0b3238bef118ad9f73f3e346eb3694dc5983853fc38508df3762e"
+      }
+    }
+  },
+  "componentCount": 29
+}

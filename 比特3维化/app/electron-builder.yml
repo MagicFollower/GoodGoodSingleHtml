@@ -1,0 +1,24 @@
+appId: com.bt3d.box
+productName: BT3D Box
+directories:
+  output: release
+files:
+  - dist/**
+  - dist-electron/**
+  - package.json
+asar: true
+electronVersion: 44.7.0
+win:
+  icon: electron/icon.ico
+  target:
+    - portable
+    - nsis
+    - dir
+  artifactName: ${productName}_${arch}.${ext}
+portable:
+  artifactName: ${productName}_portable.${ext}
+nsis:
+  artifactName: ${productName}_setup.${ext}
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true

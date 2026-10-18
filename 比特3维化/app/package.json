@@ -1,0 +1,38 @@
+{
+  "name": "bt3d-box",
+  "productName": "BT3D Box",
+  "private": true,
+  "version": "1.0.0",
+  "description": "BT3D 比特流混淆容器桌面工具（直接调用 sdk/ 的单文件加解密实现）",
+  "author": "BT3D",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "ensure-electron": "install-electron",
+    "dev": "node bin/dev.mjs",
+    "build": "node bin/build.mjs",
+    "dist": "node bin/build.mjs && electron-builder --win",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p electron/tsconfig.json",
+    "rb:fetch": "node bin/fetch-reactbits.mjs",
+    "rb:check": "node bin/fetch-reactbits.mjs --check",
+    "sdk:check": "node bin/check-sdk.mjs"
+  },
+  "devDependencies": {
+    "@electron/asar": "^3.4.1",
+    "@gsap/react": "^2.1.2",
+    "@hugeicons/core-free-icons": "^4.3.5",
+    "@hugeicons/react": "^1.1.10",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "6.1.2",
+    "electron": "44.7.0",
+    "electron-builder": "26.15.3",
+    "gsap": "^3.15.0",
+    "motion": "^14.3.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "typescript": "5.9.3",
+    "vite": "8.3.4"
+  },
+  "license": "UNLICENSED"
+}

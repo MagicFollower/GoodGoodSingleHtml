@@ -1,0 +1,133 @@
+/* ReactBits 组件的宿主适配层。
+ *
+ * 三条纪律：
+ * 1. 不改 vendored 源码（lock.json 的哈希校验会红），适配只写在这里；
+ * 2. 件自带的 CSS 变量（--al-* / --hb-* / --gs-* 等）优先，能走 props 就走 props；
+ * 3. 内联自定义属性盖不住（件把 --xx 写在元素 style 上），所以这类只能改调用点的 props。
+ */
+
+/* 件根元素是 figure 的（TiltedCard 族）会把 UA 默认的 1em 40px 边距带进来 */
+figure {
+  margin: 0;
+}
+
+/* 背景层：DarkVeil 的 canvas 自己不带定位，宿主给它铺满。
+ *
+ * z-index 必须是负的。.app 是 position:relative + z-index:1 的层叠上下文，
+ * 而面板/顶栏/状态栏都是普通静态块盒 —— 按 CSS 绘制顺序，定位且 z-index:0 的元素排在它们之后，
+ * 也就是说 z-index:0 会把这层 canvas 画到所有面板之上（实测 stack= 读数：panel:static/auto，veil:fixed/0）。
+ * 平时看不出来（噪声场本身很暗），一旦这块全屏 WebGL 画布出故障变成实心白，
+ * 整窗就被 55% 白洗掉（用户 2026-10-18 20:21 的截图正是这个形态：面板 #141a27 → #94979D，
+ * 与 0.55×#fff + 0.45×#141a27 逐通道差 1 以内）。挪到 -1 后同样的故障只会影响栏间空隙。 */
+.bg-veil {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: var(--veil);
+}
+
+/* GlassSurface：面板宽度必须显式给，否则 refraction 的采样盒会按内容收缩 */
+.glass-panel {
+  position: relative;
+  width: 100%;
+}
+
+.glass-panel > div {
+  width: 100%;
+}
+
+/* 件内层没有确定高度时，包裹层会让子级的 height:100% 链断掉（Magnet 实测把 52×52 压成 52×22） */
+.fit-inner,
+.fit-inner > * {
+  min-width: 0;
+}
+
+.fit-inner > * {
+  height: 100%;
+}
+
+/* BorderGlow 自带 1px 边框，在 box-sizing:border-box 下吃掉内容宽 2px */
+.border-glow-host {
+  box-sizing: content-box;
+}
+
+/* AnimatedList：件里 width 默认 500px（本适配层用 props 传 '100%'，这里只兜住轨道与裁切轴） */
+.job-list .animated-list__track {
+  scrollbar-width: thin;
+}
+
+.job-list {
+  overflow-x: clip; /* 只许纵向滚，别让规范把横轴也升成 auto */
+}
+
+/* LineSidebar 是按全屏侧栏排的，宿主压成窄栏：字号收小、项距收紧 */
+.side-nav {
+  --font-size: 0.94rem;
+  --item-gap: 6px;
+}
+
+.side-nav ul {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+/* HoldButton 把标签渲染三遍（本体 + 液面 + 波峰），取文本只能取 idle 层 */
+.hold-target .hold-button__idle {
+  white-space: nowrap;
+}
+
+/* 主操作按钮：件里宽度由内容撑开，三挡标签字数不同（按住执行混淆/还原/队列）会一宽一窄。
+   给一个下限让两颗 CTA 同宽，配合 size="lg"（52px 高 / 17px 字号）把主操作抬出来。 */
+.cta-frame .hold-button {
+  min-width: 176px;
+}
+
+/* StarBorder 包一层做星光描边，内部按钮要自己撑满 */
+.cta-frame > div {
+  display: block;
+  width: 100%;
+}
+
+/* GlideSelect 的菜单宽度按内容算，窄栏里给它一个下限 */
+.glide-host {
+  min-width: 0;
+}
+
+/* WarmTooltip 的浮层会被祖先 overflow 裁，宿主保证 tooltip 容器不裁 */
+.tip-host {
+  overflow: visible;
+}
+
+/* GlassIcons：SVG 滤镜 defs 会占位，容器不需要额外高度 */
+.file-glyphs svg {
+  display: block;
+}
+
+/* LatticeLoader / CometDial / Counter 的文字色跟随令牌 */
+.rb-ink {
+  color: var(--ink);
+}
+
+.rb-muted {
+  color: var(--ink-3);
+}
+
+.rb-mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 动效降级：件基本不读 prefers-reduced-motion，宿主统一兜 */
+@media (prefers-reduced-motion: reduce) {
+  .bg-veil {
+    display: none;
+  }
+
+  .job-list *,
+  .cta-frame * {
+    animation: none !important;
+    transition-duration: 1ms !important;
+  }
+}

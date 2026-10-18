@@ -1,0 +1,91 @@
+:root {
+  color-scheme: light dark;
+  --font-ui: system-ui, 'Segoe UI Variable Text', 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'Cascadia Mono', 'Consolas', 'Segoe UI Mono', ui-monospace, monospace;
+
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 18px;
+  --gap: 14px;
+  --pad: 16px;
+}
+
+/* 浅色：默认档 */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #f5f7fb;
+  --bg-2: #eceff5;
+  --surface: #ffffff;
+  --surface-2: #f3f5fa;
+  --ink: #101623;
+  --ink-2: #3d485c;
+  --ink-3: #6c7789;
+  --line: #d4dae5;
+  --line-2: #e6eaf1;
+  --accent: #2f6feb;
+  --accent-ink: #ffffff;
+  --accent-soft: #dbe6ff;
+  --ok: #1f8a4c;
+  --warn: #a6690a;
+  --err: #c0392b;
+  --run: #2f6feb;
+  --veil: 0.10;
+  --glass: rgba(255, 255, 255, 0.72);
+  --shadow: 0 10px 30px rgba(16, 22, 35, 0.10);
+}
+
+/* 深色：主档。与浅色一一对应，缺一条就是 bug（判据见 doc/运行与构建 第 3 节） */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #0b0f17;
+  --bg-2: #0f1420;
+  --surface: #141a27;
+  --surface-2: #1a2132;
+  --ink: #e9eef8;
+  --ink-2: #b6c1d4;
+  --ink-3: #808ca3;
+  --line: #2a3346;
+  --line-2: #222b3c;
+  --accent: #6aa5ff;
+  --accent-ink: #06101f;
+  --accent-soft: #1b2b47;
+  --ok: #3ddc97;
+  --warn: #ffbf47;
+  --err: #ff7b7b;
+  --run: #6aa5ff;
+  --veil: 0.55;
+  --glass: rgba(20, 26, 39, 0.66);
+  --shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+html {
+  font-size: 100%;
+}
+
+body {
+  font-family: var(--font-ui);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--bg);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 34%, transparent);
+}

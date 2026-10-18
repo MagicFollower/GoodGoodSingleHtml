@@ -1,0 +1,46 @@
+# 依赖
+node_modules/
+
+# 构建产物
+dist/
+dist-electron/
+release*/
+*.tsbuildinfo
+.vite/
+.vite-temp/
+
+# 临时物
+*.log
+npm-debug.log*
+*-out*.txt
+*-err*.txt
+*.tmp
+*.pid
+*-probe*.txt
+.skill-gen-tmp/
+vite.config.mts.timestamp-*.mjs
+
+# 环境
+.env
+.env.local
+.env.production
+
+# 编辑器
+.vscode/
+.idea/
+*.swo
+*.swp
+
+# OS 垃圾
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+nul
+
+# package-lock.json 不忽略：ReactBits 取件哈希与构建产物可复全都靠钉死的依赖版本
+
+# 反向放行（交付资产，必须留在文件最后；以后追加规则一律加在这三条之前）
+!src/reactbits/**
+!electron/icon.ico
+!doc/**
